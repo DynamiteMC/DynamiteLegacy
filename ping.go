@@ -28,6 +28,7 @@ type StatusResponse struct {
 	Description        Description `json:"description"`
 	EnforcesSecureChat bool        `json:"enforcesSecureChat"`
 	PreviewsChat       bool        `json:"previewsChat"`
+	Favicon            string      `json:"favicon"`
 }
 
 func CreateStatusResponse(data StatusResponse) string {

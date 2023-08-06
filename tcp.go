@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/base64"
 	"fmt"
+	"image"
+
+	_ "image/png"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,7 +49,7 @@ func (d *MojangLoginHandler) getPrivateKey() (key *rsa.PrivateKey, err error) {
 }
 
 func handleTCPRequest(conn net.Conn) {
-	//defer conn.Close()
+	defer conn.Close()
 	var packet pk.Packet
 	conn.ReadPacket(&packet)
 	ip := conn.Socket.RemoteAddr().String()
@@ -68,7 +74,7 @@ func handleTCPRequest(conn net.Conn) {
 					switch p.ID {
 					case packetid.StatusRequest:
 						logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusRequest packet")
-						response := CreateStatusResponse(StatusResponse{
+						response := StatusResponse{
 							Version: Version{
 								Name:     "GoCraftServer",
 								Protocol: int(Protocol),
@@ -83,8 +89,26 @@ func handleTCPRequest(conn net.Conn) {
 							},
 							EnforcesSecureChat: true,
 							PreviewsChat:       true,
-						})
-						conn.WritePacket(pk.Marshal(0x00, pk.String(response)))
+						}
+						if config.Icon.Enable {
+							data, err := os.ReadFile(config.Icon.Path)
+							if err != nil {
+								logger.Warn("Server icon is enabled but wasn't found; ignoring")
+							} else {
+								image, format, _ := image.DecodeConfig(bytes.NewReader(data))
+								if format == "png" {
+									if image.Width == 64 && image.Height == 64 {
+										icon := base64.StdEncoding.EncodeToString(data)
+										response.Favicon = fmt.Sprintf("data:image/png;base64,%s", icon)
+									} else {
+										logger.Debug("Server icon is not a 64x64 png file; ignoring")
+									}
+								} else {
+									logger.Debug("Server icon is not a 64x64 png file; ignoring")
+								}
+							}
+						}
+						conn.WritePacket(pk.Marshal(0x00, pk.String(CreateStatusResponse(response))))
 						logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusResponse packet")
 					case packetid.StatusPingRequest:
 						logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusPingRequest packet")

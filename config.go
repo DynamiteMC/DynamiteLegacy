@@ -23,10 +23,16 @@ type Messages struct {
 	Banned         string `yaml:"banned"`
 }
 
+type Icon struct {
+	Path   string `yaml:"path"`
+	Enable bool   `yaml:"enable"`
+}
+
 type Config struct {
 	TCP        TCP      `yaml:"java"`
 	UDP        UDP      `yaml:"bedrock"`
 	MOTD       string   `yaml:"motd"`
+	Icon       Icon     `yaml:"icon"`
 	Whitelist  bool     `yaml:"whitelist"`
 	Gamemode   string   `yaml:"gamemode"`
 	MaxPlayers int      `yaml:"max_players"`
@@ -59,6 +65,10 @@ func LoadConfig() *Config {
 			Messages: Messages{
 				NotInWhitelist: "You are not whitelisted.",
 				Banned:         "You are banned from this server.",
+			},
+			Icon: Icon{
+				Path:   "server-icon.png",
+				Enable: false,
 			},
 		}
 		file, _ := os.Create("gocraft.yml")
