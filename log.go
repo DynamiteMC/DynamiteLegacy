@@ -49,3 +49,12 @@ func (logger Logger) Error(data ...interface{}) {
 	}
 	fmt.Printf("%s %s\n", red("ERROR"), str)
 }
+
+func (logger Logger) Warn(data ...interface{}) {
+	yellow := color.New(color.BgYellow).Add(color.FgWhite).Add(color.Bold).SprintFunc()
+	str := ""
+	for _, d := range data {
+		str += fmt.Sprintf("%v ", d)
+	}
+	fmt.Printf("%s %s\n", yellow("WARN"), str)
+}

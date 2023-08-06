@@ -1,0 +1,16 @@
+java:
+  server_ip: 0.0.0.0
+  server_port: 25565
+  enable: true
+bedrock:
+  server_ip: 0.0.0.0
+  server_port: 19132
+  enable: false
+motd: A GoCraft Minecraft Server
+whitelist: false
+gamemode: survival
+max_players: 100
+online_mode: true
+messages:
+  not_in_whitelist: You are not whitelisted.
+  banned: You are banned from this server.
