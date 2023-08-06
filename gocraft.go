@@ -2,17 +2,19 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"time"
 
-	"github.com/Tnze/go-mc/net"
+	mcnet "github.com/Tnze/go-mc/net"
 )
 
 var server = Server{}
 var logger = Logger{}
 var startTime int64
 var config = LoadConfig()
-var TCPListener *net.Listener
+var TCPListener *mcnet.Listener
+var UDPListener *net.UDPConn
 
 type Server struct {
 	Players []Player
@@ -35,7 +37,7 @@ func main() {
 	}
 	if config.TCP.Enable {
 		var err error
-		TCPListener, err = net.ListenMC(config.TCP.ServerIP + ":" + fmt.Sprint(config.TCP.ServerPort))
+		TCPListener, err = mcnet.ListenMC(config.TCP.ServerIP + ":" + fmt.Sprint(config.TCP.ServerPort))
 		if err != nil {
 			logger.Error("[TCP] Failed to listen:", err.Error())
 			os.Exit(1)
@@ -43,6 +45,17 @@ func main() {
 		defer TCPListener.Close()
 
 		logger.Info("[TCP] Listening on " + config.TCP.ServerIP + ":" + fmt.Sprint(config.TCP.ServerPort))
+	}
+	if config.UDP.Enable {
+		var err error
+		UDPListener, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(config.UDP.ServerIP), Port: config.UDP.ServerPort})
+		if err != nil {
+			logger.Error("[UDP] Failed to listen:", err.Error())
+			os.Exit(1)
+		}
+		defer UDPListener.Close()
+
+		logger.Info("[UDP] Listening on " + config.UDP.ServerIP + ":" + fmt.Sprint(config.UDP.ServerPort))
 	}
 
 	logger.Info("Done!", "("+fmt.Sprint(time.Now().Unix()-startTime)+"s)")
