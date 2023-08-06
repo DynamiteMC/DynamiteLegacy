@@ -54,6 +54,7 @@ func LoadIPBans() []string {
 0: User is valid
 1: User is not in whitelist
 2: User is banned
+3: Server is full
 
 */
 
@@ -61,14 +62,6 @@ func ValidatePlayer(name string, id string, ip string) int {
 	whitelist := LoadPlayerList("whitelist.json")
 	bannedPlayers := LoadPlayerList("banned_players.json")
 	bannedIPs := LoadIPBans()
-	if config.Whitelist {
-		for _, player := range whitelist {
-			if player.UUID == id {
-				return 0
-			}
-		}
-		return 1
-	}
 	for _, player := range bannedPlayers {
 		if player.UUID == id {
 			return 2
@@ -78,6 +71,25 @@ func ValidatePlayer(name string, id string, ip string) int {
 		if i == ip {
 			return 2
 		}
+	}
+	if config.Whitelist {
+		for _, player := range whitelist {
+			if player.UUID == id {
+				if config.MaxPlayers == -1 {
+					return 0
+				}
+				if len(server.Players) >= config.MaxPlayers {
+					return 3
+				}
+			}
+		}
+		return 1
+	}
+	if config.MaxPlayers == -1 {
+		return 0
+	}
+	if len(server.Players) >= config.MaxPlayers {
+		return 3
 	}
 	return 0
 }

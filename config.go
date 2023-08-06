@@ -21,6 +21,7 @@ type UDP struct {
 type Messages struct {
 	NotInWhitelist string `yaml:"not_in_whitelist"`
 	Banned         string `yaml:"banned"`
+	ServerFull     string `yaml:"server_full"`
 }
 
 type Icon struct {
@@ -65,6 +66,7 @@ func LoadConfig() *Config {
 			Messages: Messages{
 				NotInWhitelist: "You are not whitelisted.",
 				Banned:         "You are banned from this server.",
+				ServerFull:     "The server is full.",
 			},
 			Icon: Icon{
 				Path:   "server-icon.png",

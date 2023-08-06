@@ -74,13 +74,17 @@ func handleTCPRequest(conn net.Conn) {
 					switch p.ID {
 					case packetid.StatusRequest:
 						logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusRequest packet")
+						max := config.MaxPlayers
+						if max == -1 {
+							max = len(server.Players) + 1
+						}
 						response := StatusResponse{
 							Version: Version{
 								Name:     "GoCraftServer",
 								Protocol: int(Protocol),
 							},
 							Players: Players{
-								Max:    config.MaxPlayers,
+								Max:    max,
 								Online: len(server.Players),
 								Sample: server.Players,
 							},
@@ -165,6 +169,11 @@ func handleTCPRequest(conn net.Conn) {
 						{
 							reason = "player is banned"
 							reasonNice = config.Messages.Banned
+						}
+					case 3:
+						{
+							reason = "server is full"
+							reasonNice = config.Messages.ServerFull
 						}
 					}
 					r := chat.Message{Text: reasonNice}
