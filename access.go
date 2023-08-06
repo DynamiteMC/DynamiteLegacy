@@ -74,8 +74,8 @@ func ValidatePlayer(name string, id string, ip string) int {
 			return 2
 		}
 	}
-	for _, ip := range bannedIPs {
-		if ip == ip {
+	for _, i := range bannedIPs {
+		if i == ip {
 			return 2
 		}
 	}
