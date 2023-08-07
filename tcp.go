@@ -211,14 +211,14 @@ func HandleTCPRequest(conn net.Conn) {
 									}
 									if time.Since(lastServerKeepAlive).Seconds() >= 10 {
 										lastKeepAliveId = r.Intn(1000)
-										conn.WritePacket(pk.Marshal(packetid.ServerboundKeepAlive, pk.Long(lastKeepAliveId)))
+										conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
 										logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
 										lastServerKeepAlive = time.Now()
 									}
 								}
 							}()
 						}
-					case int32(packetid.ClientboundKeepAlive):
+					case int32(packetid.ServerboundKeepAlive):
 						{
 							var id pk.Long
 							packet.Scan(&id)
