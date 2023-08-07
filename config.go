@@ -18,6 +18,11 @@ type UDP struct {
 	Enable     bool   `yaml:"enable"`
 }
 
+type Tablist struct {
+	Header []string `yaml:"header"`
+	Footer []string `yaml:"footer"`
+}
+
 type Messages struct {
 	NotInWhitelist string `yaml:"not_in_whitelist"`
 	Banned         string `yaml:"banned"`
@@ -42,6 +47,7 @@ type Config struct {
 	Hardcore   bool     `yaml:"hardcore"`
 	MaxPlayers int      `yaml:"max_players"`
 	Online     bool     `yaml:"online_mode"`
+	Tablist    Tablist  `yaml:"tablist"`
 	Messages   Messages `yaml:"messages"`
 }
 
@@ -79,6 +85,10 @@ func LoadConfig() *Config {
 			Icon: Icon{
 				Path:   "server-icon.png",
 				Enable: false,
+			},
+			Tablist: Tablist{
+				Header: []string{},
+				Footer: []string{},
 			},
 		}
 		file, _ := os.Create("gocraft.yml")
