@@ -191,6 +191,7 @@ func HandleTCPRequest(conn net.Conn) {
 					Connection: conn,
 					Properties: properties,
 				}
+				var exit = false
 				for {
 					var packet pk.Packet
 					conn.ReadPacket(&packet)
@@ -206,7 +207,7 @@ func HandleTCPRequest(conn net.Conn) {
 							server.Events.Emit("PlayerJoin", player, conn)
 							go func() {
 								for {
-									if server.Players == nil || server.Players[idString].UUID != idString {
+									if exit == true {
 										break
 									}
 									if time.Since(lastServerKeepAlive).Seconds() >= 10 {
@@ -231,6 +232,7 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					case 0:
 						{
+							exit = true
 							server.Events.Emit("PlayerLeave", player)
 						}
 					}

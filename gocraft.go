@@ -91,6 +91,15 @@ func main() {
 				}
 				go HandleTCPRequest(conn)
 			}
+			if server.Config.UDP.Enable {
+				buffer := make([]byte, 1024)
+				_, ip, err := UDPListener.ReadFromUDP(buffer)
+				if err != nil {
+					continue
+				}
+				go handleUDPRequest(UDPListener, ip.String(), buffer)
+				continue
+			}
 		}
 	}
 }

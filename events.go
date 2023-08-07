@@ -24,5 +24,6 @@ func OnPlayerJoin(params ...interface{}) {
 func OnPlayerLeave(params ...interface{}) {
 	player := params[0].(Player)
 	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerLeave, player.Name)))
+	server.Playerlist.RemovePlayer(player)
 	delete(server.Players, player.UUID)
 }

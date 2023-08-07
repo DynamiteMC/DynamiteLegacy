@@ -86,6 +86,10 @@ func (playerlist Playerlist) AddPlayer(player Player) {
 	server.BroadcastPacket(pk.Packet{ID: int32(packetid.ClientboundPlayerInfoUpdate), Data: buf.Bytes()})
 }
 
+func (playerlist Playerlist) RemovePlayer(player Player) {
+	server.BroadcastPacket(pk.Marshal(packetid.ClientboundPlayerInfoRemove, pk.Array([]pk.UUID{player.UUIDb})))
+}
+
 func (playerlist Playerlist) GetTexts(playerName string) (string, string) {
 	header := ParsePlaceholders(strings.Join(server.Config.Tablist.Header, "\n"), playerName)
 	footer := ParsePlaceholders(strings.Join(server.Config.Tablist.Footer, "\n"), playerName)
