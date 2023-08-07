@@ -2,14 +2,13 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"strings"
 )
 
 func ReloadConfig() {
-	config = LoadConfig()
-	fmt.Println("Reloaded config successfully")
+	server.Config = LoadConfig()
+	logger.Print("Reloaded config successfully")
 }
 
 func CreateSTDINReader() {
@@ -19,16 +18,23 @@ func CreateSTDINReader() {
 	go CreateSTDINReader()
 }
 
+var Commands = []string{"stop", "reload"}
+
 func Command(command string) {
 	command = strings.TrimSpace(command)
 	switch command {
-	case "reload-config":
+	case "reload":
 		{
 			ReloadConfig()
 		}
+	case "stop":
+		{
+			logger.Info("Shutting down server...")
+			os.Exit(0)
+		}
 	default:
 		{
-			fmt.Println("Unknown command. Please run 'help' for a list of commands.")
+			logger.Print("Unknown command. Please run 'help' for a list of commands.")
 		}
 	}
 }

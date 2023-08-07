@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/fatih/color"
 )
@@ -20,13 +22,35 @@ type Logger struct {
 	FilePath string
 }
 
+func (logger Logger) Append(str string) {
+	consoleText = append(consoleText, str)
+	if guiConsole != nil {
+		guiConsole.SetText(strings.Join(consoleText, "\n"))
+	}
+}
+
+func getDateString() string {
+	return time.Now().Format("15:04:05")
+}
+
 func (logger Logger) Info(data ...interface{}) {
 	blue := color.New(color.BgBlue).Add(color.FgWhite).Add(color.Bold).SprintFunc()
 	str := ""
 	for _, d := range data {
 		str += fmt.Sprintf("%v ", d)
 	}
-	fmt.Println(blue("INFO"), str)
+	time := getDateString()
+	logger.Append(fmt.Sprintf("%s [INFO] %s", time, str))
+	fmt.Println(time, blue("INFO"), str)
+}
+
+func (logger Logger) Print(data ...interface{}) {
+	str := ""
+	for _, d := range data {
+		str += fmt.Sprintf("%v ", d)
+	}
+	logger.Append(str)
+	fmt.Println(str)
 }
 
 func (logger Logger) Debug(data ...interface{}) {
@@ -38,7 +62,9 @@ func (logger Logger) Debug(data ...interface{}) {
 	for _, d := range data {
 		str += fmt.Sprintf("%v ", d)
 	}
-	fmt.Println(cyan("DEBUG"), str)
+	time := getDateString()
+	logger.Append(fmt.Sprintf("%s [DEBUG] %s", time, str))
+	fmt.Println(time, cyan("DEBUG"), str)
 }
 
 func (logger Logger) Error(data ...interface{}) {
@@ -47,7 +73,9 @@ func (logger Logger) Error(data ...interface{}) {
 	for _, d := range data {
 		str += fmt.Sprintf("%v ", d)
 	}
-	fmt.Printf("%s %s\n", red("ERROR"), str)
+	time := getDateString()
+	logger.Append(fmt.Sprintf("%s [ERROR] %s", time, str))
+	fmt.Println(time, red("ERROR"), str)
 }
 
 func (logger Logger) Warn(data ...interface{}) {
@@ -56,5 +84,7 @@ func (logger Logger) Warn(data ...interface{}) {
 	for _, d := range data {
 		str += fmt.Sprintf("%v ", d)
 	}
-	fmt.Printf("%s %s\n", yellow("WARN"), str)
+	time := getDateString()
+	logger.Append(fmt.Sprintf("%s [WARN] %s", time, str))
+	fmt.Println(time, yellow("WARN"), str)
 }

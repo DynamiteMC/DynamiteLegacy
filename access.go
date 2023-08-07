@@ -55,6 +55,7 @@ func LoadIPBans() []string {
 1: User is not in whitelist
 2: User is banned
 3: Server is full
+4: User is already playing on another client
 
 */
 
@@ -72,23 +73,25 @@ func ValidatePlayer(name string, id string, ip string) int {
 			return 2
 		}
 	}
-	if config.Whitelist {
+	if server.Config.Whitelist {
+		d := false
 		for _, player := range whitelist {
 			if player.UUID == id {
-				if config.MaxPlayers == -1 {
-					return 0
-				}
-				if len(server.Players) >= config.MaxPlayers {
-					return 3
-				}
+				d = true
+				break
 			}
 		}
-		return 1
+		if !d {
+			return 1
+		}
 	}
-	if config.MaxPlayers == -1 {
+	if server.Players[id].UUID == id {
+		return 4
+	}
+	if server.Config.MaxPlayers == -1 {
 		return 0
 	}
-	if len(server.Players) >= config.MaxPlayers {
+	if len(server.Players) >= server.Config.MaxPlayers {
 		return 3
 	}
 	return 0

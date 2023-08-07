@@ -1,6 +1,8 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type Version struct {
 	Name     string `json:"name"`
@@ -11,11 +13,6 @@ type Players struct {
 	Max    int      `json:"max"`
 	Online int      `json:"online"`
 	Sample []Player `json:"sample"`
-}
-
-type Player struct {
-	Name string `json:"name"`
-	UUID string `json:"id"`
 }
 
 type Description struct {

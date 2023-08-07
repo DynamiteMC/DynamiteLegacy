@@ -22,6 +22,9 @@ type Messages struct {
 	NotInWhitelist string `yaml:"not_in_whitelist"`
 	Banned         string `yaml:"banned"`
 	ServerFull     string `yaml:"server_full"`
+	AlreadyPlaying string `yaml:"already_playing"`
+	PlayerJoin     string `yaml:"player_join"`
+	PlayerLeave    string `yaml:"player_leave"`
 }
 
 type Icon struct {
@@ -36,6 +39,7 @@ type Config struct {
 	Icon       Icon     `yaml:"icon"`
 	Whitelist  bool     `yaml:"whitelist"`
 	Gamemode   string   `yaml:"gamemode"`
+	Hardcore   bool     `yaml:"hardcore"`
 	MaxPlayers int      `yaml:"max_players"`
 	Online     bool     `yaml:"online_mode"`
 	Messages   Messages `yaml:"messages"`
@@ -61,12 +65,16 @@ func LoadConfig() *Config {
 			MOTD:       "A GoCraft Minecraft Server",
 			Whitelist:  false,
 			Gamemode:   "survival",
+			Hardcore:   false,
 			MaxPlayers: 100,
 			Online:     true,
 			Messages: Messages{
 				NotInWhitelist: "You are not whitelisted.",
 				Banned:         "You are banned from this server.",
 				ServerFull:     "The server is full.",
+				AlreadyPlaying: "You are already playing on this server with a different client.",
+				PlayerJoin:     "§e%player% has joined the game",
+				PlayerLeave:    "§e%player% has left the game",
 			},
 			Icon: Icon{
 				Path:   "server-icon.png",

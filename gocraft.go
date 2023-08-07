@@ -4,70 +4,93 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"time"
 
 	mcnet "github.com/Tnze/go-mc/net"
 )
 
-var server = Server{}
-var logger = Logger{}
 var startTime int64
-var config = LoadConfig()
 var TCPListener *mcnet.Listener
 var UDPListener *net.UDPConn
+var logger = Logger{}
 
-type Server struct {
-	Players []Player
+var server = Server{
+	Config:  LoadConfig(),
+	Players: make(map[string]Player),
+	Events:  Events{_events: make(map[string][]func(...interface{}))},
 }
 
 func main() {
 	startTime = time.Now().Unix()
 	logger.Info("Starting GoCraft")
-	//if !HasArg("-nogui") {
-	//	logger.Info("Launching GUI panel. Disable this using -nogui")
-	//	//go LaunchGUI()
-	//}
 	LoadPlayerList("whitelist.json")
 	LoadPlayerList("ops.json")
 	LoadPlayerList("banned_players.json")
 	LoadIPBans()
 	logger.Debug("Loaded player info")
-	if !config.Online && !HasArg("-no_offline_warn") {
+	if !server.Config.Online && !HasArg("-no_offline_warn") {
 		logger.Warn("Offline mode is insecure. You can disable this message using -no_offline_warn")
 	}
-	if config.TCP.Enable {
+	if server.Config.TCP.Enable {
 		var err error
-		TCPListener, err = mcnet.ListenMC(config.TCP.ServerIP + ":" + fmt.Sprint(config.TCP.ServerPort))
+		TCPListener, err = mcnet.ListenMC(server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
 		if err != nil {
 			logger.Error("[TCP] Failed to listen:", err.Error())
 			os.Exit(1)
 		}
 		defer TCPListener.Close()
 
-		logger.Info("[TCP] Listening on " + config.TCP.ServerIP + ":" + fmt.Sprint(config.TCP.ServerPort))
+		logger.Info("[TCP] Listening on " + server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
 	}
-	if config.UDP.Enable {
+	if server.Config.UDP.Enable {
 		var err error
-		UDPListener, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(config.UDP.ServerIP), Port: config.UDP.ServerPort})
+		UDPListener, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(server.Config.UDP.ServerIP), Port: server.Config.UDP.ServerPort})
 		if err != nil {
 			logger.Error("[UDP] Failed to listen:", err.Error())
 			os.Exit(1)
 		}
 		defer UDPListener.Close()
 
-		logger.Info("[UDP] Listening on " + config.UDP.ServerIP + ":" + fmt.Sprint(config.UDP.ServerPort))
+		logger.Info("[UDP] Listening on " + server.Config.UDP.ServerIP + ":" + fmt.Sprint(server.Config.UDP.ServerPort))
 	}
+	CreateEvents()
 
-	logger.Info("Done!", "("+fmt.Sprint(time.Now().Unix()-startTime)+"s)")
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for range c {
+			Command("stop")
+		}
+	}()
 	go CreateSTDINReader()
-	for {
-		if config.TCP.Enable {
-			conn, err := TCPListener.Accept()
-			if err != nil {
-				fmt.Println("Error accepting: ", err.Error())
-				os.Exit(1)
+	if HasArg("-gui") {
+		go func() {
+			for {
+				if server.Config.TCP.Enable {
+					conn, err := TCPListener.Accept()
+					if err != nil {
+						fmt.Println("Error accepting: ", err.Error())
+						os.Exit(1)
+					}
+					go HandleTCPRequest(conn)
+				}
 			}
-			go handleTCPRequest(conn)
+		}()
+		logger.Info("Launching GUI panel")
+		logger.Info("Done!", "("+fmt.Sprint(time.Now().Unix()-startTime)+"s)")
+		LaunchGUI().ShowAndRun()
+	} else {
+		logger.Info("Done!", "("+fmt.Sprint(time.Now().Unix()-startTime)+"s)")
+		for {
+			if server.Config.TCP.Enable {
+				conn, err := TCPListener.Accept()
+				if err != nil {
+					fmt.Println("Error accepting: ", err.Error())
+					os.Exit(1)
+				}
+				go HandleTCPRequest(conn)
+			}
 		}
 	}
 }
