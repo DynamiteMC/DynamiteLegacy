@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
+	"github.com/Tnze/go-mc/yggdrasil/user"
 )
 
 type Events struct {
@@ -40,13 +42,18 @@ func (emitter Events) Emit(key string, data ...interface{}) {
 type Player struct {
 	Name       string `json:"name"`
 	UUID       string `json:"id"`
+	UUIDb      pk.UUID
 	Connection net.Conn
+	Properties []user.Property
 }
 
+type Playerlist struct{}
+
 type Server struct {
-	Players map[string]Player
-	Events  Events
-	Config  *Config
+	Players    map[string]Player
+	Events     Events
+	Config     *Config
+	Playerlist Playerlist
 }
 
 func (server Server) BroadcastMessage(message chat.Message) {
@@ -54,6 +61,29 @@ func (server Server) BroadcastMessage(message chat.Message) {
 	for _, player := range server.Players {
 		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
 	}
+}
+
+func (server Server) BroadcastPacket(packet pk.Packet) {
+	for _, player := range server.Players {
+		player.Connection.WritePacket(packet)
+	}
+}
+
+func (playerlist Playerlist) AddPlayer(player Player) {
+	addPlayerAction := NewPlayerInfoAction(
+		PlayerInfoAddPlayer,
+		PlayerInfoUpdateListed,
+	)
+	var buf bytes.Buffer
+	_, _ = addPlayerAction.WriteTo(&buf)
+	_, _ = pk.VarInt(len(server.Players)).WriteTo(&buf)
+	for _, player := range server.Players {
+		_, _ = pk.UUID(player.UUIDb).WriteTo(&buf)
+		_, _ = pk.String(player.Name).WriteTo(&buf)
+		_, _ = pk.Array(player.Properties).WriteTo(&buf)
+		_, _ = pk.Boolean(true).WriteTo(&buf)
+	}
+	server.BroadcastPacket(pk.Packet{ID: int32(packetid.ClientboundPlayerInfoUpdate), Data: buf.Bytes()})
 }
 
 func ParsePlaceholders(str string, playerName string) string {

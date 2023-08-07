@@ -6,6 +6,9 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 
+	r "math/rand"
+	"time"
+
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -183,18 +186,44 @@ func HandleTCPRequest(conn net.Conn) {
 				player := Player{
 					Name:       fmt.Sprint(name),
 					UUID:       idString,
+					UUIDb:      id,
 					Connection: conn,
+					Properties: properties,
 				}
 				server.Players[idString] = player
 				lastPacketId := p.ID
+				lastServerKeepAlive := time.Now()
+				var lastKeepAliveId int
 				server.Events.Emit("PlayerJoin", player)
+				go func() {
+					for {
+						if server.Players[idString].UUID != idString {
+							break
+						}
+						if time.Since(lastServerKeepAlive).Seconds() >= 10 {
+							lastKeepAliveId = r.Intn(1000)
+							conn.WritePacket(pk.Marshal(packetid.ServerboundKeepAlive, pk.Long(lastKeepAliveId)))
+							logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
+							lastServerKeepAlive = time.Now()
+						}
+					}
+				}()
 				for {
 					var packet pk.Packet
 					conn.ReadPacket(&packet)
 					if lastPacketId == packet.ID {
 						continue
 					}
-					fmt.Println(packet.ID)
+					if packet.ID == int32(packetid.ClientboundKeepAlive) {
+						var id pk.Long
+						packet.Scan(&id)
+						if id != pk.Long(lastKeepAliveId) {
+							conn.Close()
+							server.Events.Emit("PlayerLeave", player)
+							break
+						}
+						logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent KeepAlive packet")
+					}
 					if packet.ID == 0 {
 						server.Events.Emit("PlayerLeave", player)
 					}
@@ -263,4 +292,22 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusPongResponse packet")
 		}
 	}
+}
+
+const (
+	PlayerInfoAddPlayer = iota
+	PlayerInfoInitializeChat
+	PlayerInfoUpdateGameMode
+	PlayerInfoUpdateListed
+	PlayerInfoUpdateLatency
+	PlayerInfoUpdateDisplayName
+	PlayerInfoEnumGuard
+)
+
+func NewPlayerInfoAction(actions ...int) pk.FixedBitSet {
+	enumSet := pk.NewFixedBitSet(PlayerInfoEnumGuard)
+	for _, action := range actions {
+		enumSet.Set(action, true)
+	}
+	return enumSet
 }

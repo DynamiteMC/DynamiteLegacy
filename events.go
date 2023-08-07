@@ -12,6 +12,7 @@ func CreateEvents() {
 func OnPlayerJoin(params ...interface{}) {
 	player := params[0].(Player)
 	server.BroadcastMessage(chat.Message{Text: ParsePlaceholders(server.Config.Messages.PlayerJoin, player.Name)})
+	server.Playerlist.AddPlayer(player)
 }
 
 func OnPlayerLeave(params ...interface{}) {
