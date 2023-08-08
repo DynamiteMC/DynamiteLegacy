@@ -182,7 +182,6 @@ func HandleTCPRequest(conn net.Conn) {
 				conn.WritePacket(pk.Marshal(0x50,
 					pk.Position{X: 100, Y: 100, Z: 100},
 					pk.Float(50)))
-				lastPacketId := p.ID
 				var lastKeepAliveId int
 				player := Player{
 					Name:       fmt.Sprint(name),
@@ -195,19 +194,27 @@ func HandleTCPRequest(conn net.Conn) {
 				for {
 					var packet pk.Packet
 					conn.ReadPacket(&packet)
-					if lastPacketId == packet.ID {
-						continue
-					}
+					fmt.Println(packet.ID)
 					switch packet.ID {
 					case 8:
 						{
 							logger.Info("["+ip+"]", "Player", name, "("+idString+")", "joined the server")
 							server.Players[idString] = player
 							lastServerKeepAlive := time.Now()
+							packet.Scan(&player.Client.Locale,
+								&player.Client.ViewDistance,
+								&player.Client.ChatMode,
+								&player.Client.ChatColors,
+								&player.Client.DisplayedSkinParts,
+								&player.Client.MainHand,
+								&player.Client.EnableTextFiltering,
+								&player.Client.AllowServerListings,
+							)
+							server.Players[idString] = player
 							server.Events.Emit("PlayerJoin", player, conn)
 							go func() {
 								for {
-									if exit == true {
+									if exit {
 										break
 									}
 									if time.Since(lastServerKeepAlive).Seconds() >= 10 {
@@ -230,13 +237,32 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent KeepAlive packet")
 						}
+					case 5:
+						{
+							var content pk.String
+							packet.Scan(&content)
+							server.Events.Emit("PlayerChatMessage", player, content)
+						}
+					case 0x0D:
+						{
+							var (
+								channel pk.Identifier
+								data    pk.String
+							)
+							packet.Scan(&channel, &data)
+							if channel == "minecraft:brand" {
+								player.Client.Brand = data
+							}
+							server.Players[idString] = player
+						}
 					case 0:
 						{
+							conn.Close()
 							exit = true
 							server.Events.Emit("PlayerLeave", player)
+							return
 						}
 					}
-					lastPacketId = packet.ID
 				}
 			}
 		}

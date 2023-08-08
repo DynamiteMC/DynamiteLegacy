@@ -39,12 +39,36 @@ func (emitter Events) Emit(key string, data ...interface{}) {
 	}
 }
 
+const (
+	CHAT_ENABLED = iota
+	CHAT_COMMANDS_ONLY
+	CHAT_HIDDEN
+)
+
+const (
+	LEFT_HAND = iota
+	RIGHT_HAND
+)
+
+type ClientData struct {
+	Locale              pk.String
+	ViewDistance        pk.Byte
+	ChatMode            pk.VarInt
+	ChatColors          pk.Boolean
+	DisplayedSkinParts  pk.UnsignedByte
+	MainHand            pk.VarInt
+	EnableTextFiltering pk.Boolean
+	AllowServerListings pk.Boolean
+	Brand               pk.String
+}
+
 type Player struct {
 	Name       string `json:"name"`
 	UUID       string `json:"id"`
 	UUIDb      pk.UUID
 	Connection net.Conn
 	Properties []user.Property
+	Client     ClientData
 }
 
 type Playerlist struct{}
@@ -91,11 +115,20 @@ func (playerlist Playerlist) RemovePlayer(player Player) {
 }
 
 func (playerlist Playerlist) GetTexts(playerName string) (string, string) {
-	header := ParsePlaceholders(strings.Join(server.Config.Tablist.Header, "\n"), playerName)
-	footer := ParsePlaceholders(strings.Join(server.Config.Tablist.Footer, "\n"), playerName)
+	header := ParsePlayerName(strings.Join(server.Config.Tablist.Header, "\n"), playerName)
+	footer := ParsePlayerName(strings.Join(server.Config.Tablist.Footer, "\n"), playerName)
 	return header, footer
 }
 
-func ParsePlaceholders(str string, playerName string) string {
+func ParsePlayerName(str string, playerName string) string {
 	return strings.ReplaceAll(str, "%player%", playerName)
+}
+
+func ParseChatMessage(str string, playerName string, content string, colors bool) string {
+	str = strings.ReplaceAll(str, "%player%", playerName)
+	str = strings.ReplaceAll(str, "%message%", content)
+	if colors {
+		str = strings.ReplaceAll(str, "&", "§")
+	}
+	return str
 }

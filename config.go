@@ -37,6 +37,12 @@ type Icon struct {
 	Enable bool   `yaml:"enable"`
 }
 
+type Chat struct {
+	Format string `yaml:"format"`
+	Colors bool   `yaml:"colors"`
+	Enable bool   `yaml:"enable"`
+}
+
 type Config struct {
 	TCP        TCP      `yaml:"java"`
 	UDP        UDP      `yaml:"bedrock"`
@@ -48,6 +54,7 @@ type Config struct {
 	MaxPlayers int      `yaml:"max_players"`
 	Online     bool     `yaml:"online_mode"`
 	Tablist    Tablist  `yaml:"tablist"`
+	Chat       Chat     `yaml:"chat"`
 	Messages   Messages `yaml:"messages"`
 }
 
@@ -89,6 +96,11 @@ func LoadConfig() *Config {
 			Tablist: Tablist{
 				Header: []string{},
 				Footer: []string{},
+			},
+			Chat: Chat{
+				Colors: false,
+				Format: "<%player%> %message%",
+				Enable: true,
 			},
 		}
 		file, _ := os.Create("gocraft.yml")
