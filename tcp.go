@@ -189,7 +189,7 @@ func HandleTCPRequest(conn net.Conn) {
 				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 					pk.Position{X: 100, Y: 100, Z: 100},
 					pk.Float(50)))
-				conn.WritePacket(pk.Marshal(0x3C,
+				/*conn.WritePacket(pk.Marshal(0x3C,
 					pk.Double(100),
 					pk.Double(100),
 					pk.Double(100),
@@ -197,19 +197,20 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.Float(12),
 					pk.Byte(0),
 					pk.VarInt(0),
-				))
+				))*/
 				data, _ := os.ReadFile("heightmap.nbt")
 				var d = make(map[string]interface{})
 				nbt.NewDecoder(bytes.NewReader(data)).Decode(d)
-				conn.WritePacket(pk.Marshal(
+				/*conn.WritePacket(pk.Marshal(
 					packetid.ClientboundLevelChunkWithLight,
 					pk.Int(0),
 					pk.Int(0),
 					pk.NBT(d),
 					pk.VarInt(0),
 					pk.ByteArray{},
-				))
+				))*/
 				var lastKeepAliveId int
+				//var lastPacket pk.Packet
 				player := Player{
 					Name:       fmt.Sprint(name),
 					UUID:       idString,
@@ -217,17 +218,18 @@ func HandleTCPRequest(conn net.Conn) {
 					Connection: conn,
 					Properties: properties,
 				}
-				var exit = false
+				var (
+					joined = false
+				)
 				for {
 					var packet pk.Packet
 					conn.ReadPacket(&packet)
-					fmt.Println(packet.ID)
+					//lastPacket = packet
 					switch packet.ID {
 					case 8:
 						{
 							logger.Info("["+ip+"]", "Player", name, "("+idString+")", "joined the server")
 							server.Players[idString] = player
-							lastServerKeepAlive := time.Now()
 							packet.Scan(&player.Client.Locale,
 								&player.Client.ViewDistance,
 								&player.Client.ChatMode,
@@ -239,17 +241,14 @@ func HandleTCPRequest(conn net.Conn) {
 							)
 							server.Players[idString] = player
 							server.Events.Emit("PlayerJoin", player, conn)
+							ticker := time.NewTicker(10 * time.Second)
+							defer ticker.Stop()
+							joined = true
 							go func() {
-								for {
-									if exit {
-										break
-									}
-									if time.Since(lastServerKeepAlive).Seconds() >= 10 {
-										lastKeepAliveId = r.Intn(1000)
-										conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
-										logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
-										lastServerKeepAlive = time.Now()
-									}
+								for range ticker.C {
+									lastKeepAliveId = r.Intn(1000)
+									conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
+									logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
 								}
 							}()
 						}
@@ -294,9 +293,11 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					case packetid.LoginDisconnect:
 						{
+
 							conn.Close()
-							exit = true
-							server.Events.Emit("PlayerLeave", player)
+							if joined {
+								server.Events.Emit("PlayerLeave", player)
+							}
 							return
 						}
 					}

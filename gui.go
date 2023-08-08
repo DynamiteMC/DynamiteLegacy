@@ -14,6 +14,8 @@ import (
 
 var consoleText []string
 var guiConsole *widget.TextGrid
+var playerCountText *widget.RichText
+var playerContainer *fyne.Container
 
 func LaunchGUI() fyne.Window {
 	app := app.New()
@@ -35,8 +37,8 @@ func LaunchGUI() fyne.Window {
 	if max == "-1" {
 		max = "Unlimited"
 	}
-	playerCount := widget.NewRichTextFromMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
-	playerContainer := container.NewVBox()
+	playerCountText = widget.NewRichTextFromMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+	playerContainer = container.NewVBox()
 	for _, player := range server.Players {
 		res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID))
 		skinData, _ := io.ReadAll(res.Body)
@@ -45,7 +47,7 @@ func LaunchGUI() fyne.Window {
 		cont := container.NewHBox(skin, widget.NewRichTextFromMarkdown("### "+player.Name))
 		playerContainer.Add(cont)
 	}
-	players := container.NewBorder(container.NewVBox(playersTitle, playerCount), nil, nil, nil, playerContainer)
+	players := container.NewBorder(container.NewVBox(playersTitle, playerCountText), nil, nil, nil, playerContainer)
 
 	sp := container.NewHSplit(console, players)
 	sp.SetOffset(0.6)
