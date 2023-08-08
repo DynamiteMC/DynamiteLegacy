@@ -30,6 +30,7 @@ type Messages struct {
 	AlreadyPlaying string `yaml:"already_playing"`
 	PlayerJoin     string `yaml:"player_join"`
 	PlayerLeave    string `yaml:"player_leave"`
+	UnknownCommand string `yaml:"unknown_command"`
 }
 
 type Icon struct {
@@ -88,6 +89,7 @@ func LoadConfig() *Config {
 				AlreadyPlaying: "You are already playing on this server with a different client.",
 				PlayerJoin:     "§e%player% has joined the game",
 				PlayerLeave:    "§e%player% has left the game",
+				UnknownCommand: "§cUnknown or incomplete command",
 			},
 			Icon: Icon{
 				Path:   "server-icon.png",

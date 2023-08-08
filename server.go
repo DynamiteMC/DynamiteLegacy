@@ -87,10 +87,34 @@ func (server Server) BroadcastMessage(message chat.Message) {
 	}
 }
 
+func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message) {
+	logger.Print(message.String())
+	op := LoadPlayerList("ops.json")
+	ops := make(map[string]Player)
+	for i := 0; i < len(op); i++ {
+		ops[op[i].UUID] = op[i]
+	}
+	for _, player := range server.Players {
+		if ops[player.UUID].UUID == player.UUID && player.UUID != playerId {
+			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
+		} else {
+			continue
+		}
+	}
+}
+
 func (server Server) BroadcastPacket(packet pk.Packet) {
 	for _, player := range server.Players {
 		player.Connection.WritePacket(packet)
 	}
+}
+
+func (server Server) Message(id string, message chat.Message) {
+	player := server.Players[id]
+	if player.UUID != id {
+		return
+	}
+	player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
 }
 
 func (playerlist Playerlist) AddPlayer(player Player) {

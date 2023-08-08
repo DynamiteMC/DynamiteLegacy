@@ -13,6 +13,7 @@ func CreateEvents() {
 	server.Events.AddListener("PlayerJoin", OnPlayerJoin)
 	server.Events.AddListener("PlayerLeave", OnPlayerLeave)
 	server.Events.AddListener("PlayerChatMessage", OnPlayerChatMessage)
+	server.Events.AddListener("PlayerCommand", OnPlayerCommand)
 }
 
 func OnPlayerJoin(params ...interface{}) {
@@ -21,6 +22,7 @@ func OnPlayerJoin(params ...interface{}) {
 	header, footer := server.Playerlist.GetTexts(player.Name)
 	connection.WritePacket(pk.Marshal(0x17, pk.Identifier("minecraft:brand"), pk.String("GoCraft")))
 	connection.WritePacket(pk.Marshal(packetid.ClientboundTabList, chat.Text(header), chat.Text(footer)))
+	connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, pk.Array([]pk.FieldEncoder{}), pk.VarInt(0)))
 	server.BroadcastMessage(chat.Text(ParsePlayerName(server.Config.Messages.PlayerJoin, player.Name)))
 	server.Playerlist.AddPlayer(player)
 }
@@ -40,4 +42,11 @@ func OnPlayerChatMessage(params ...interface{}) {
 	content := params[1].(pk.String)
 	data := ParseChatMessage(server.Config.Chat.Format, player.Name, fmt.Sprint(content), server.Config.Chat.Colors)
 	server.BroadcastMessage(chat.Text(data))
+}
+
+func OnPlayerCommand(params ...interface{}) {
+	player := params[0].(Player)
+	command := params[1].(pk.String)
+	server.BroadcastMessageAdmin(player.UUID, chat.Text(fmt.Sprintf("Player %s (%s) executed command %s", player.Name, player.UUID, command)))
+	server.Message(player.UUID, Command(fmt.Sprint(command)))
 }

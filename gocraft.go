@@ -60,7 +60,7 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			Command("stop")
+			fmt.Println(Command("stop"))
 		}
 	}()
 	go CreateSTDINReader()

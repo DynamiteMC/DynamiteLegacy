@@ -157,9 +157,8 @@ func HandleTCPRequest(conn net.Conn) {
 				if server.Config.Gamemode == "spectator" {
 					gamemode = 3
 				}
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLogin,
-					pk.Int(0),
+				hashedSeed := [8]byte{}
+				fields := []pk.FieldEncoder{pk.Int(0),
 					pk.Boolean(server.Config.Hardcore),
 					pk.UnsignedByte(gamemode),
 					pk.Byte(-1),
@@ -169,7 +168,7 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.NBT(world.NetworkCodec),
 					pk.Identifier("minecraft:overworld"),
 					pk.Identifier("world"),
-					pk.Long(binary.BigEndian.Uint64([]byte("e53e40231b931de13ba973e5154cd572ad7d001e2bf5f7d6e26e0ae48252653f")[:8])),
+					pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
 					pk.VarInt(server.Config.MaxPlayers), // Max players (ignored by client)
 					pk.VarInt(12),                       // View Distance
 					pk.VarInt(12),                       // Simulation Distance
@@ -178,6 +177,13 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.Boolean(false),                   // Is Debug
 					pk.Boolean(false),                   // Is Flat
 					pk.Boolean(false),                   // Has Last Death Location
+				}
+				if Protocol >= 763 {
+					fields = append(fields, pk.VarInt(3))
+				}
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLogin,
+					fields...,
 				))
 				conn.WritePacket(pk.Marshal(0x50,
 					pk.Position{X: 100, Y: 100, Z: 100},
@@ -237,7 +243,17 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent KeepAlive packet")
 						}
-					case 5:
+					case int32(packetid.ServerboundChatCommand):
+						{
+							var (
+								command   pk.String
+								timestamp pk.Long
+								arguments pk.ByteArray
+							)
+							packet.Scan(&command, &timestamp, &arguments)
+							server.Events.Emit("PlayerCommand", player, command, timestamp, arguments)
+						}
+					case int32(packetid.ServerboundChat):
 						{
 							var content pk.String
 							packet.Scan(&content)
@@ -255,7 +271,7 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							server.Players[idString] = player
 						}
-					case 0:
+					case packetid.LoginDisconnect:
 						{
 							conn.Close()
 							exit = true

@@ -4,37 +4,41 @@ import (
 	"bufio"
 	"os"
 	"strings"
+
+	"github.com/Tnze/go-mc/chat"
 )
 
-func ReloadConfig() {
+func ReloadConfig() chat.Message {
 	server.Config = LoadConfig()
-	logger.Print("Reloaded config successfully")
+	return chat.Text("Reloaded config successfully")
 }
 
 func CreateSTDINReader() {
 	reader := bufio.NewReader(os.Stdin)
 	command, _ := reader.ReadString('\n')
-	Command(command)
+	logger.Print(Command(command))
 	go CreateSTDINReader()
 }
 
 var Commands = []string{"stop", "reload"}
 
-func Command(command string) {
+func Command(command string) chat.Message {
 	command = strings.TrimSpace(command)
 	switch command {
 	case "reload":
 		{
-			ReloadConfig()
+			return ReloadConfig()
 		}
 	case "stop":
 		{
-			logger.Info("Shutting down server...")
-			os.Exit(0)
+			go func() {
+				os.Exit(0)
+			}()
+			return chat.Text("Shutting down server...")
 		}
 	default:
 		{
-			logger.Print("Unknown command. Please run 'help' for a list of commands.")
+			return chat.Text(server.Config.Messages.UnknownCommand)
 		}
 	}
 }
