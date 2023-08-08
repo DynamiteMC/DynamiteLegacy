@@ -19,7 +19,6 @@ func LaunchGUI() fyne.Window {
 	app := app.New()
 	window := app.NewWindow("GoCraft Server")
 	title := widget.NewRichTextFromMarkdown("# GoCraft Server")
-	topContainer := container.NewHBox(title)
 
 	consoleTitle := widget.NewRichTextFromMarkdown("## Console")
 	guiConsole = widget.NewTextGridFromString(strings.Join(consoleText, "\n"))
@@ -29,7 +28,7 @@ func LaunchGUI() fyne.Window {
 		Command(s)
 		command.SetText("")
 	}
-	console := container.NewBorder(container.NewVBox(consoleTitle, guiConsole), command, nil, nil)
+	console := container.NewBorder(consoleTitle, command, nil, nil, container.NewScroll(guiConsole))
 
 	playersTitle := widget.NewRichTextFromMarkdown("## Players")
 	max := fmt.Sprint(server.Config.MaxPlayers)
@@ -46,10 +45,11 @@ func LaunchGUI() fyne.Window {
 		cont := container.NewHBox(skin, widget.NewRichTextFromMarkdown("### "+player.Name))
 		playerContainer.Add(cont)
 	}
-	players := container.NewVBox(playersTitle, playerCount, playerContainer)
+	players := container.NewBorder(container.NewVBox(playersTitle, playerCount), nil, nil, nil, playerContainer)
 
-	content := container.NewVBox(topContainer, container.NewHBox(console, players))
-	window.SetContent(content)
+	sp := container.NewHSplit(console, players)
+	sp.SetOffset(0.6)
+	window.SetContent(container.NewBorder(title, nil, nil, nil, sp))
 	window.Resize(fyne.NewSize(700, 300))
 	return window
 }

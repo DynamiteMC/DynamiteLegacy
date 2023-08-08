@@ -23,6 +23,7 @@ import (
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
+	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/offline"
@@ -185,9 +186,29 @@ func HandleTCPRequest(conn net.Conn) {
 					packetid.ClientboundLogin,
 					fields...,
 				))
-				conn.WritePacket(pk.Marshal(0x50,
+				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 					pk.Position{X: 100, Y: 100, Z: 100},
 					pk.Float(50)))
+				conn.WritePacket(pk.Marshal(0x3C,
+					pk.Double(100),
+					pk.Double(100),
+					pk.Double(100),
+					pk.Float(12),
+					pk.Float(12),
+					pk.Byte(0),
+					pk.VarInt(0),
+				))
+				data, _ := os.ReadFile("heightmap.nbt")
+				var d = make(map[string]interface{})
+				nbt.NewDecoder(bytes.NewReader(data)).Decode(d)
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(0),
+					pk.Int(0),
+					pk.NBT(d),
+					pk.VarInt(0),
+					pk.ByteArray{},
+				))
 				var lastKeepAliveId int
 				player := Player{
 					Name:       fmt.Sprint(name),

@@ -7,7 +7,7 @@ Feel free to contribute by making an issue or pull request
 
 ## Progress
 - Can show MOTD/Ping/Server icon/Max players
-- Online mode
+- Online mode works
 - Whitelist/Ban/IP ban/Server full block
 - Can login to the server (into a void)
 - Can show the tab
