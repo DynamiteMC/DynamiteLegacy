@@ -11,3 +11,4 @@ Feel free to contribute by making an issue or pull request
 - Whitelist/Ban/IP ban/Server full block
 - Can login to the server (into a void)
 - Can show the tab
+- Chat works
