@@ -6,13 +6,18 @@ import (
 	"os"
 )
 
-func getPermissions(playerId string) map[string]bool {
-	d, err := os.ReadFile(fmt.Sprintf("permissions/%s.json", playerId))
+type PlayerPermissions struct {
+	Group       string          `json:"group"`
+	Permissions map[string]bool `json:"permissions"`
+}
+
+func getPermissions(playerId string) PlayerPermissions {
+	d, err := os.ReadFile(fmt.Sprintf("permissions/players/%s.json", playerId))
 	if err != nil {
-		os.WriteFile(fmt.Sprintf("permissions/%s.json", playerId), []byte("{}"), 0755)
-		return make(map[string]bool)
+		os.WriteFile(fmt.Sprintf("permissions/players/%s.json", playerId), []byte("{}"), 0755)
+		return PlayerPermissions{}
 	}
-	var data map[string]bool
+	var data PlayerPermissions
 	json.Unmarshal(d, &data)
 	return data
 }
@@ -32,7 +37,7 @@ func (server Server) HasPermissions(playerId string, perms []string) bool {
 	}
 	permissions := getPermissions(playerId)
 	for _, perm := range perms {
-		if !permissions[perm] {
+		if !permissions.Permissions[perm] {
 			return false
 		}
 	}
