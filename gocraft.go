@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"net"
 	"os"
@@ -19,6 +20,9 @@ var server = Server{
 	Events:  Events{_events: make(map[string][]func(...interface{}))},
 	Logger:  Logger{},
 }
+
+//go:embed registry
+var registries embed.FS
 
 func main() {
 	server.StartTime = time.Now().Unix()

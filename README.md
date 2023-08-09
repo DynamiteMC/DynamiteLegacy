@@ -12,3 +12,8 @@ Feel free to contribute by making an issue or pull request
 - Can login to the server (into a void)
 - Can show the tab
 - Chat works
+
+## Tested Versions
+1.20.1
+1.20
+1.19.4

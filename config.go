@@ -106,7 +106,7 @@ func LoadConfig() *Config {
 				AlreadyPlaying:          "You are already playing on this server with a different client.",
 				PlayerJoin:              "§e%player% has joined the game",
 				PlayerLeave:             "§e%player% has left the game",
-				UnknownCommand:          "§cUnknown or incomplete command",
+				UnknownCommand:          "§cUnknown command. Please use '/help' for a list of commands.",
 				ProtocolNew:             "Your protocol is too new!",
 				ProtocolOld:             "Your protocol is too old!",
 				InsufficientPermissions: "§cYou aren't permitted to use this command",

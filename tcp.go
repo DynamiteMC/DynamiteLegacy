@@ -25,9 +25,9 @@ import (
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/offline"
+	"github.com/Tnze/go-mc/registry"
 	"github.com/Tnze/go-mc/server/auth"
 	"github.com/Tnze/go-mc/yggdrasil/user"
-	"github.com/go-mc/server/world"
 )
 
 type HeightMap struct {
@@ -78,6 +78,22 @@ const (
 	PROTOCOL_1_7_2  = 4
 	PROTOCOL_1_7    = 3
 )
+
+func getNetworkRegistry(protocol pk.VarInt) (reg registry.NetworkCodec) {
+	switch protocol {
+	case 763:
+		{
+			data, _ := registries.ReadFile("registry/1.20.nbt")
+			nbt.Unmarshal(data, &reg)
+		}
+	default:
+		{
+			data, _ := os.ReadFile("registry/1.19.nbt")
+			nbt.Unmarshal(data, &reg)
+		}
+	}
+	return
+}
 
 func (d *MojangLoginHandler) getPrivateKey() (key *rsa.PrivateKey, err error) {
 	key = d.privateKey.Load()
@@ -222,7 +238,7 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.Array([]pk.Identifier{
 						pk.Identifier("world"),
 					}),
-					pk.NBT(world.NetworkCodec),
+					pk.NBT(getNetworkRegistry(Protocol)),
 					pk.Identifier("minecraft:overworld"),
 					pk.Identifier("world"),
 					pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
@@ -247,246 +263,7 @@ func HandleTCPRequest(conn net.Conn) {
 				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 					pk.Position{X: 100, Y: 100, Z: 100},
 					pk.Float(50)))
-				if Protocol >= PROTOCOL_1_20 {
-					conn.WritePacket(pk.Marshal(0x3C,
-						pk.Double(100),
-						pk.Double(100),
-						pk.Double(100),
-						pk.Float(12),
-						pk.Float(12),
-						pk.Byte(0),
-						pk.VarInt(0),
-					))
-				}
-				data, _ := os.ReadFile("heightmap.nbt")
-				var heightMap HeightMap
-				nbt.Unmarshal(data, &heightMap)
-				/*conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(0),
-					pk.Int(0),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(0),
-					pk.Int(1),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(0),
-					pk.Int(2),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(0),
-					pk.Int(3),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(1),
-					pk.Int(0),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(1),
-					pk.Int(1),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(1),
-					pk.Int(2),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(1),
-					pk.Int(3),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(2),
-					pk.Int(0),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(2),
-					pk.Int(1),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(2),
-					pk.Int(2),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(2),
-					pk.Int(3),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(3),
-					pk.Int(0),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(3),
-					pk.Int(1),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(3),
-					pk.Int(2),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLevelChunkWithLight,
-					pk.Int(3),
-					pk.Int(3),
-					pk.NBT(heightMap),
-					pk.ByteArray{},
-					pk.VarInt(0),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.BitSet([]int64{}),
-					pk.VarInt(0),
-					pk.VarInt(0),
-				))*/
 				var lastKeepAliveId int
-				//var lastPacket pk.Packet
 				player := Player{
 					Name:       fmt.Sprint(name),
 					UUID:       idString,
@@ -502,7 +279,6 @@ func HandleTCPRequest(conn net.Conn) {
 				for {
 					var packet pk.Packet
 					conn.ReadPacket(&packet)
-					//lastPacket = packet
 					switch packet.ID {
 					case 8:
 						{
