@@ -14,6 +14,8 @@ Feel free to contribute by making an issue or pull request
 - Chat works
 
 ## Tested Versions
-1.20.1
-1.20
-1.19.4
+1.20.1 (763)
+
+1.20 (763)
+
+1.19.4 (762)
