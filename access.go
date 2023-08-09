@@ -27,6 +27,23 @@ func LoadPlayerList(path string) []Player {
 	return list
 }
 
+func WritePlayerList(path string, player Player) {
+	list := []Player{}
+
+	file, err := os.Open(path)
+	if err != nil {
+		file.Close()
+		file, _ := os.Create(path)
+		e := json.NewEncoder(file)
+		e.Encode(&list)
+	}
+	defer file.Close()
+	var data []Player
+	json.NewDecoder(file).Decode(&data)
+	data = append(data, player)
+	json.NewEncoder(file).Encode(&data)
+}
+
 func LoadIPBans() []string {
 	list := []string{}
 
@@ -73,7 +90,7 @@ func ValidatePlayer(name string, id string, ip string) int {
 			return 2
 		}
 	}
-	if server.Config.Whitelist {
+	if server.Config.Whitelist.Enable {
 		d := false
 		for _, player := range whitelist {
 			if player.UUID == id {

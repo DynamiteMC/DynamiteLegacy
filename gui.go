@@ -15,7 +15,7 @@ import (
 var consoleText []string
 var guiConsole *widget.TextGrid
 var playerCountText *widget.RichText
-var playerContainer *fyne.Container
+var playerContainer *widget.List
 
 func LaunchGUI() fyne.Window {
 	app := app.New()
@@ -27,7 +27,7 @@ func LaunchGUI() fyne.Window {
 	command := widget.NewEntry()
 	command.SetPlaceHolder("Input a command")
 	command.OnSubmitted = func(s string) {
-		Command(s)
+		server.Command("console", s)
 		command.SetText("")
 	}
 	console := container.NewBorder(consoleTitle, command, nil, nil, container.NewScroll(guiConsole))
@@ -38,15 +38,33 @@ func LaunchGUI() fyne.Window {
 		max = "Unlimited"
 	}
 	playerCountText = widget.NewRichTextFromMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
-	playerContainer = container.NewVBox()
-	for _, player := range server.Players {
+	playerContainer = widget.NewList(
+		func() int {
+			return len(server.Players)
+		},
+		func() fyne.CanvasObject {
+			return container.NewHBox()
+		},
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			cont := o.(*fyne.Container)
+			player := server.Players[server.PlayerIDs[i]]
+			if len(cont.Objects) == 0 {
+				res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID))
+				skinData, _ := io.ReadAll(res.Body)
+				skin := widget.NewIcon(fyne.NewStaticResource("skin", skinData))
+				skin.Resize(fyne.NewSize(640, 640))
+				cont.Objects = append(cont.Objects, skin, widget.NewRichTextFromMarkdown("### "+player.Name))
+				cont.Refresh()
+			}
+		})
+	/*for _, player := range server.Players {
 		res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID))
 		skinData, _ := io.ReadAll(res.Body)
 		skin := widget.NewIcon(fyne.NewStaticResource("skin", skinData))
 		skin.Resize(fyne.NewSize(640, 640))
 		cont := container.NewHBox(skin, widget.NewRichTextFromMarkdown("### "+player.Name))
 		playerContainer.Add(cont)
-	}
+	}*/
 	players := container.NewBorder(container.NewVBox(playersTitle, playerCountText), nil, nil, nil, playerContainer)
 
 	sp := container.NewHSplit(console, players)

@@ -13,8 +13,6 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/go-mc/server/world"
-
 	_ "image/png"
 	"os"
 	"strings"
@@ -29,12 +27,57 @@ import (
 	"github.com/Tnze/go-mc/offline"
 	"github.com/Tnze/go-mc/server/auth"
 	"github.com/Tnze/go-mc/yggdrasil/user"
+	"github.com/go-mc/server/world"
 )
+
+type HeightMap struct {
+	MotionBlocking []int64 `nbt:"MOTION_BLOCKING"`
+}
 
 type MojangLoginHandler struct {
 	privateKey     atomic.Pointer[rsa.PrivateKey]
 	lockPrivateKey sync.Mutex
 }
+
+const (
+	PROTOCOL_1_20   = 763
+	PROTOCOL_1_19_4 = 762
+	PROTOCOL_1_19_3 = 761
+	PROTOCOL_1_19_1 = 760
+	PROTOCOL_1_19   = 759
+	PROTOCOL_1_18_2 = 758
+	PROTOCOL_1_18   = 757
+	PROTOCOL_1_17_1 = 756
+	PROTOCOL_1_17   = 755
+	PROTOCOL_1_16_4 = 754
+	PROTOCOL_1_16_3 = 753
+	PROTOCOL_1_16_1 = 736
+	PROTOCOL_1_16   = 735
+	PROTOCOL_1_15_2 = 578
+	PROTOCOL_1_15_1 = 575
+	PROTOCOL_1_15   = 573
+	PROTOCOL_1_14_4 = 498
+	PROTOCOL_1_14_3 = 490
+	PROTOCOL_1_14_2 = 485
+	PROTOCOL_1_14   = 477
+	PROTOCOL_1_13_2 = 404
+	PROTOCOL_1_13_1 = 401
+	PROTOCOL_1_13   = 393
+	PROTOCOL_1_12_2 = 340
+	PROTOCOL_1_12_1 = 338
+	PROTOCOL_1_12   = 335
+	PROTOCOL_1_11_1 = 316
+	PROTOCOL_1_11   = 315
+	PROTOCOL_1_10   = 210
+	PROTOCOL_1_9_3  = 110
+	PROTOCOL_1_9_2  = 109
+	PROTOCOL_1_9_1  = 108
+	PROTOCOL_1_9    = 107
+	PROTOCOL_1_8    = 47
+	PROTOCOL_1_7_6  = 5
+	PROTOCOL_1_7_2  = 4
+	PROTOCOL_1_7    = 3
+)
 
 func (d *MojangLoginHandler) getPrivateKey() (key *rsa.PrivateKey, err error) {
 	key = d.privateKey.Load()
@@ -62,7 +105,7 @@ func HandleTCPRequest(conn net.Conn) {
 	conn.ReadPacket(&packet)
 	ip := conn.Socket.RemoteAddr().String()
 	if packet.ID == 0x00 { // 1.7+
-		logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent handshake")
+		server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent handshake")
 		var (
 			Protocol, Intention pk.VarInt
 			ServerAddress       pk.String
@@ -80,6 +123,14 @@ func HandleTCPRequest(conn net.Conn) {
 			}
 		case 2:
 			{ // login
+				if server.Config.TCP.MinProtocol != 0 && server.Config.TCP.MinProtocol > int(Protocol) {
+					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolOld)))
+					return
+				}
+				if server.Config.TCP.MaxProtocol != 0 && server.Config.TCP.MaxProtocol < int(Protocol) {
+					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolNew)))
+					return
+				}
 				var p pk.Packet
 				conn.ReadPacket(&p)
 				var (
@@ -87,7 +138,7 @@ func HandleTCPRequest(conn net.Conn) {
 					uuid pk.UUID
 				)
 				p.Scan(&name, &uuid)
-				logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent LoginStart packet. Username:", name)
+				server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent LoginStart packet. Username:", name)
 				var id pk.UUID
 				var idString string
 				properties := []user.Property{}
@@ -111,7 +162,7 @@ func HandleTCPRequest(conn net.Conn) {
 					id = pk.UUID(offline.NameToUUID(string(name)))
 					idString = fmt.Sprint(offline.NameToUUID(string(name)))
 				}
-				logger.Info("["+ip+"]", "Player", name, "("+idString+")", "is attempting to join.")
+				server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "is attempting to join.")
 				valid := ValidatePlayer(fmt.Sprint(name), idString, strings.Split(ip, ":")[0])
 				if valid != 0 {
 					var reason string
@@ -139,14 +190,19 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					}
 					r := chat.Text(reasonNice)
-					logger.Info("["+ip+"]", "Player", name, "("+idString+")", "attempt failed. reason:", reason)
+					server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "attempt failed. reason:", reason)
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, r))
+				}
+				loginSuccessFields := []pk.FieldEncoder{
+					id,
+					pk.String(name),
+				}
+				if Protocol >= PROTOCOL_1_19 {
+					loginSuccessFields = append(loginSuccessFields, pk.Array(properties))
 				}
 				conn.WritePacket(pk.Marshal(
 					packetid.LoginSuccess,
-					id,
-					pk.String(name),
-					pk.Array(properties),
+					loginSuccessFields...,
 				))
 				gamemode := 0
 				if server.Config.Gamemode == "creative" {
@@ -179,35 +235,255 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.Boolean(false),                   // Is Flat
 					pk.Boolean(false),                   // Has Last Death Location
 				}
-				if Protocol >= 763 {
+				if Protocol >= PROTOCOL_1_20 {
 					fields = append(fields, pk.VarInt(3))
 				}
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLogin,
-					fields...,
-				))
+				if Protocol >= PROTOCOL_1_19 {
+					conn.WritePacket(pk.Marshal(
+						packetid.ClientboundLogin,
+						fields...,
+					))
+				}
 				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 					pk.Position{X: 100, Y: 100, Z: 100},
 					pk.Float(50)))
-				/*conn.WritePacket(pk.Marshal(0x3C,
-					pk.Double(100),
-					pk.Double(100),
-					pk.Double(100),
-					pk.Float(12),
-					pk.Float(12),
-					pk.Byte(0),
-					pk.VarInt(0),
-				))*/
+				if Protocol >= PROTOCOL_1_20 {
+					conn.WritePacket(pk.Marshal(0x3C,
+						pk.Double(100),
+						pk.Double(100),
+						pk.Double(100),
+						pk.Float(12),
+						pk.Float(12),
+						pk.Byte(0),
+						pk.VarInt(0),
+					))
+				}
 				data, _ := os.ReadFile("heightmap.nbt")
-				var d = make(map[string]interface{})
-				nbt.NewDecoder(bytes.NewReader(data)).Decode(d)
+				var heightMap HeightMap
+				nbt.Unmarshal(data, &heightMap)
 				/*conn.WritePacket(pk.Marshal(
 					packetid.ClientboundLevelChunkWithLight,
 					pk.Int(0),
 					pk.Int(0),
-					pk.NBT(d),
-					pk.VarInt(0),
+					pk.NBT(heightMap),
 					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(0),
+					pk.Int(1),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(0),
+					pk.Int(2),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(0),
+					pk.Int(3),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(1),
+					pk.Int(0),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(1),
+					pk.Int(1),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(1),
+					pk.Int(2),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(1),
+					pk.Int(3),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(2),
+					pk.Int(0),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(2),
+					pk.Int(1),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(2),
+					pk.Int(2),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(2),
+					pk.Int(3),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(3),
+					pk.Int(0),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(3),
+					pk.Int(1),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(3),
+					pk.Int(2),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
+				))
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLevelChunkWithLight,
+					pk.Int(3),
+					pk.Int(3),
+					pk.NBT(heightMap),
+					pk.ByteArray{},
+					pk.VarInt(0),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.BitSet([]int64{}),
+					pk.VarInt(0),
+					pk.VarInt(0),
 				))*/
 				var lastKeepAliveId int
 				//var lastPacket pk.Packet
@@ -217,9 +493,11 @@ func HandleTCPRequest(conn net.Conn) {
 					UUIDb:      id,
 					Connection: conn,
 					Properties: properties,
+					IP:         ip,
 				}
 				var (
 					joined = false
+					left   = false
 				)
 				for {
 					var packet pk.Packet
@@ -228,8 +506,12 @@ func HandleTCPRequest(conn net.Conn) {
 					switch packet.ID {
 					case 8:
 						{
-							logger.Info("["+ip+"]", "Player", name, "("+idString+")", "joined the server")
+							if joined {
+								continue
+							}
+							server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "joined the server")
 							server.Players[idString] = player
+							server.PlayerIDs = append(server.PlayerIDs, idString)
 							packet.Scan(&player.Client.Locale,
 								&player.Client.ViewDistance,
 								&player.Client.ChatMode,
@@ -248,7 +530,7 @@ func HandleTCPRequest(conn net.Conn) {
 								for range ticker.C {
 									lastKeepAliveId = r.Intn(1000)
 									conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
-									logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
+									server.Logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
 								}
 							}()
 						}
@@ -261,7 +543,7 @@ func HandleTCPRequest(conn net.Conn) {
 								server.Events.Emit("PlayerLeave", player)
 								break
 							}
-							logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent KeepAlive packet")
+							server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent KeepAlive packet")
 						}
 					case int32(packetid.ServerboundChatCommand):
 						{
@@ -293,11 +575,12 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					case packetid.LoginDisconnect:
 						{
-
+							server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "disconnected")
 							conn.Close()
-							if joined {
+							if joined && !left {
 								server.Events.Emit("PlayerLeave", player)
 							}
+							left = true
 							return
 						}
 					}
@@ -314,7 +597,7 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 		conn.ReadPacket(&p)
 		switch p.ID {
 		case packetid.StatusRequest:
-			logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusRequest packet")
+			server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusRequest packet")
 			max := server.Config.MaxPlayers
 			if max == -1 {
 				max = len(server.Players) + 1
@@ -342,7 +625,7 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			if server.Config.Icon.Enable {
 				data, err := os.ReadFile(server.Config.Icon.Path)
 				if err != nil {
-					logger.Warn("Server icon is enabled but wasn't found; ignoring")
+					server.Logger.Warn("Server icon is enabled but wasn't found; ignoring")
 				} else {
 					image, format, _ := image.DecodeConfig(bytes.NewReader(data))
 					if format == "png" {
@@ -350,19 +633,19 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 							icon := base64.StdEncoding.EncodeToString(data)
 							response.Favicon = fmt.Sprintf("data:image/png;base64,%s", icon)
 						} else {
-							logger.Debug("Server icon is not a 64x64 png file; ignoring")
+							server.Logger.Debug("Server icon is not a 64x64 png file; ignoring")
 						}
 					} else {
-						logger.Debug("Server icon is not a 64x64 png file; ignoring")
+						server.Logger.Debug("Server icon is not a 64x64 png file; ignoring")
 					}
 				}
 			}
 			conn.WritePacket(pk.Marshal(0x00, pk.String(CreateStatusResponse(response))))
-			logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusResponse packet")
+			server.Logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusResponse packet")
 		case packetid.StatusPingRequest:
-			logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusPingRequest packet")
+			server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusPingRequest packet")
 			conn.WritePacket(p)
-			logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusPongResponse packet")
+			server.Logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusPongResponse packet")
 		}
 	}
 }

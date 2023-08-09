@@ -31,7 +31,7 @@ type StatusResponse struct {
 func CreateStatusResponse(data StatusResponse) string {
 	buffer, err := json.Marshal(&data)
 	if err != nil {
-		logger.Error("Failed to create StatusResponse packet")
+		server.Logger.Error("Failed to create StatusResponse packet")
 	}
 	return string(buffer)
 }

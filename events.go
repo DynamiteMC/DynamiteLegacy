@@ -2,12 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
 	"github.com/Tnze/go-mc/net"
@@ -27,19 +22,29 @@ func OnPlayerJoin(params ...interface{}) {
 	header, footer := server.Playerlist.GetTexts(player.Name)
 	connection.WritePacket(pk.Marshal(0x17, pk.Identifier("minecraft:brand"), pk.String("GoCraft")))
 	connection.WritePacket(pk.Marshal(packetid.ClientboundTabList, chat.Text(header), chat.Text(footer)))
-	connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, pk.Array([]pk.FieldEncoder{}), pk.VarInt(0)))
+	/*connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, pk.Array([]pk.FieldEncoder{
+		pk.Array([]pk.FieldEncoder{
+			pk.Byte(0x0),
+			pk.VarInt(1),
+			pk.Array([]pk.VarInt{pk.VarInt(1)}),
+		}),
+		pk.Array([]pk.FieldEncoder{
+			pk.Byte(0x01),
+			pk.VarInt(0),
+			pk.Array([]pk.VarInt{}),
+			pk.VarInt(0),
+			pk.String("me"),
+		}),
+	}), pk.VarInt(0)))*/
 
 	max := fmt.Sprint(server.Config.MaxPlayers)
 	if max == "-1" {
 		max = "Unlimited"
 	}
-	playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
-	res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID))
-	skinData, _ := io.ReadAll(res.Body)
-	skin := widget.NewIcon(fyne.NewStaticResource("skin", skinData))
-	skin.Resize(fyne.NewSize(640, 640))
-	cont := container.NewHBox(skin, widget.NewRichTextFromMarkdown("### "+player.Name))
-	playerContainer.Add(cont)
+	if playerCountText != nil && playerContainer != nil {
+		playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+		playerContainer.Refresh()
+	}
 
 	server.BroadcastMessage(chat.Text(ParsePlayerName(server.Config.Messages.PlayerJoin, player.Name)))
 	server.Playerlist.AddPlayer(player)
@@ -53,7 +58,10 @@ func OnPlayerLeave(params ...interface{}) {
 	if max == "-1" {
 		max = "Unlimited"
 	}
-	playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+	if playerCountText != nil && playerContainer != nil {
+		playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+		playerContainer.Refresh()
+	}
 
 	server.BroadcastMessage(chat.Text(ParsePlayerName(server.Config.Messages.PlayerLeave, player.Name)))
 	server.Playerlist.RemovePlayer(player)
@@ -73,5 +81,5 @@ func OnPlayerCommand(params ...interface{}) {
 	player := params[0].(Player)
 	command := params[1].(pk.String)
 	server.BroadcastMessageAdmin(player.UUID, chat.Text(fmt.Sprintf("Player %s (%s) executed command %s", player.Name, player.UUID, command)))
-	server.Message(player.UUID, Command(fmt.Sprint(command)))
+	server.Message(player.UUID, server.Command(player.UUID, fmt.Sprint(command)))
 }

@@ -7,9 +7,11 @@ import (
 )
 
 type TCP struct {
-	ServerIP   string `yaml:"server_ip"`
-	ServerPort int    `yaml:"server_port"`
-	Enable     bool   `yaml:"enable"`
+	ServerIP    string `yaml:"server_ip"`
+	ServerPort  int    `yaml:"server_port"`
+	Enable      bool   `yaml:"enable"`
+	MinProtocol int    `yaml:"min_protocol"`
+	MaxProtocol int    `yaml:"max_protocol"`
 }
 
 type UDP struct {
@@ -24,13 +26,16 @@ type Tablist struct {
 }
 
 type Messages struct {
-	NotInWhitelist string `yaml:"not_in_whitelist"`
-	Banned         string `yaml:"banned"`
-	ServerFull     string `yaml:"server_full"`
-	AlreadyPlaying string `yaml:"already_playing"`
-	PlayerJoin     string `yaml:"player_join"`
-	PlayerLeave    string `yaml:"player_leave"`
-	UnknownCommand string `yaml:"unknown_command"`
+	NotInWhitelist          string `yaml:"not_in_whitelist"`
+	Banned                  string `yaml:"banned"`
+	ServerFull              string `yaml:"server_full"`
+	AlreadyPlaying          string `yaml:"already_playing"`
+	PlayerJoin              string `yaml:"player_join"`
+	PlayerLeave             string `yaml:"player_leave"`
+	UnknownCommand          string `yaml:"unknown_command"`
+	ProtocolNew             string `yaml:"protocol_new"`
+	ProtocolOld             string `yaml:"protocol_old"`
+	InsufficientPermissions string `yaml:"insufficient_permissions"`
 }
 
 type Icon struct {
@@ -44,19 +49,25 @@ type Chat struct {
 	Enable bool   `yaml:"enable"`
 }
 
+type Whitelist struct {
+	Enforce bool `yaml:"enforce"`
+	Enable  bool `yaml:"enable"`
+}
+
 type Config struct {
-	TCP        TCP      `yaml:"java"`
-	UDP        UDP      `yaml:"bedrock"`
-	MOTD       string   `yaml:"motd"`
-	Icon       Icon     `yaml:"icon"`
-	Whitelist  bool     `yaml:"whitelist"`
-	Gamemode   string   `yaml:"gamemode"`
-	Hardcore   bool     `yaml:"hardcore"`
-	MaxPlayers int      `yaml:"max_players"`
-	Online     bool     `yaml:"online_mode"`
-	Tablist    Tablist  `yaml:"tablist"`
-	Chat       Chat     `yaml:"chat"`
-	Messages   Messages `yaml:"messages"`
+	ServerName string    `yaml:"server_name"`
+	TCP        TCP       `yaml:"java"`
+	UDP        UDP       `yaml:"bedrock"`
+	MOTD       string    `yaml:"motd"`
+	Icon       Icon      `yaml:"icon"`
+	Whitelist  Whitelist `yaml:"whitelist"`
+	Gamemode   string    `yaml:"gamemode"`
+	Hardcore   bool      `yaml:"hardcore"`
+	MaxPlayers int       `yaml:"max_players"`
+	Online     bool      `yaml:"online_mode"`
+	Tablist    Tablist   `yaml:"tablist"`
+	Chat       Chat      `yaml:"chat"`
+	Messages   Messages  `yaml:"messages"`
 }
 
 func LoadConfig() *Config {
@@ -66,30 +77,39 @@ func LoadConfig() *Config {
 	if err != nil {
 		file.Close()
 		config = &Config{
+			ServerName: "GoCraft",
 			TCP: TCP{
-				ServerIP:   "0.0.0.0",
-				ServerPort: 25565,
-				Enable:     true,
+				ServerIP:    "0.0.0.0",
+				ServerPort:  25565,
+				Enable:      true,
+				MinProtocol: 757,
+				MaxProtocol: 763,
 			},
 			UDP: UDP{
 				ServerIP:   "0.0.0.0",
 				ServerPort: 19132,
 				Enable:     false,
 			},
-			MOTD:       "A GoCraft Minecraft Server",
-			Whitelist:  false,
+			MOTD: "A GoCraft Minecraft Server",
+			Whitelist: Whitelist{
+				Enforce: false,
+				Enable:  false,
+			},
 			Gamemode:   "survival",
 			Hardcore:   false,
 			MaxPlayers: 100,
 			Online:     true,
 			Messages: Messages{
-				NotInWhitelist: "You are not whitelisted.",
-				Banned:         "You are banned from this server.",
-				ServerFull:     "The server is full.",
-				AlreadyPlaying: "You are already playing on this server with a different client.",
-				PlayerJoin:     "§e%player% has joined the game",
-				PlayerLeave:    "§e%player% has left the game",
-				UnknownCommand: "§cUnknown or incomplete command",
+				NotInWhitelist:          "You are not whitelisted.",
+				Banned:                  "You are banned from this server.",
+				ServerFull:              "The server is full.",
+				AlreadyPlaying:          "You are already playing on this server with a different client.",
+				PlayerJoin:              "§e%player% has joined the game",
+				PlayerLeave:             "§e%player% has left the game",
+				UnknownCommand:          "§cUnknown or incomplete command",
+				ProtocolNew:             "Your protocol is too new!",
+				ProtocolOld:             "Your protocol is too old!",
+				InsufficientPermissions: "§cYou aren't permitted to use this command",
 			},
 			Icon: Icon{
 				Path:   "server-icon.png",

@@ -62,6 +62,22 @@ type ClientData struct {
 	Brand               pk.String
 }
 
+type Argument struct {
+	Name                string
+	Redirect            int
+	RequiredPermissions []string
+	SuggestionsType     string
+	ParserID            string
+}
+
+type Command struct {
+	Name                string
+	Redirect            int
+	RequiredPermissions []string
+	Arguments           []Argument
+	Executable          bool
+}
+
 type Player struct {
 	Name       string `json:"name"`
 	UUID       string `json:"id"`
@@ -69,26 +85,30 @@ type Player struct {
 	Connection net.Conn
 	Properties []user.Property
 	Client     ClientData
+	IP         string
 }
 
 type Playerlist struct{}
 
 type Server struct {
 	Players    map[string]Player
+	PlayerIDs  []string
 	Events     Events
 	Config     *Config
+	Logger     Logger
 	Playerlist Playerlist
+	StartTime  int64
 }
 
 func (server Server) BroadcastMessage(message chat.Message) {
-	logger.Print(message.String())
+	server.Logger.Print(message.String())
 	for _, player := range server.Players {
-		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
+		server.Message(player.UUID, message)
 	}
 }
 
 func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message) {
-	logger.Print(message.String())
+	server.Logger.Print(message.String())
 	op := LoadPlayerList("ops.json")
 	ops := make(map[string]Player)
 	for i := 0; i < len(op); i++ {
@@ -96,7 +116,7 @@ func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message
 	}
 	for _, player := range server.Players {
 		if ops[player.UUID].UUID == player.UUID && player.UUID != playerId {
-			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
+			server.Message(player.UUID, message)
 		} else {
 			continue
 		}
