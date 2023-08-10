@@ -91,13 +91,17 @@ type Player struct {
 type Playerlist struct{}
 
 type Server struct {
-	Players    map[string]Player
-	PlayerIDs  []string
-	Events     Events
-	Config     *Config
-	Logger     Logger
-	Playerlist Playerlist
-	StartTime  int64
+	Players       map[string]Player
+	PlayerIDs     []string
+	Events        Events
+	Config        *Config
+	Logger        Logger
+	Playerlist    Playerlist
+	StartTime     int64
+	Whitelist     []Player
+	OPs           []Player
+	BannedPlayers []Player
+	BannedIPs     []string
 }
 
 func (server Server) BroadcastMessage(message chat.Message) {

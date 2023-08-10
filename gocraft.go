@@ -15,10 +15,11 @@ var TCPListener *mcnet.Listener
 var UDPListener *net.UDPConn
 
 var server = Server{
-	Config:  LoadConfig(),
-	Players: make(map[string]Player),
-	Events:  Events{_events: make(map[string][]func(...interface{}))},
-	Logger:  Logger{},
+	Config:    LoadConfig(),
+	Players:   make(map[string]Player),
+	PlayerIDs: make([]string, 0),
+	Events:    Events{_events: make(map[string][]func(...interface{}))},
+	Logger:    Logger{},
 }
 
 //go:embed registry
@@ -27,13 +28,13 @@ var registries embed.FS
 func main() {
 	server.StartTime = time.Now().Unix()
 	server.Logger.Info("Starting GoCraft")
-	LoadPlayerList("whitelist.json")
-	LoadPlayerList("ops.json")
-	LoadPlayerList("banned_players.json")
+	server.Whitelist = LoadPlayerList("whitelist.json")
+	server.OPs = LoadPlayerList("ops.json")
+	server.BannedPlayers = LoadPlayerList("banned_players.json")
+	server.BannedIPs = LoadIPBans()
 	os.MkdirAll("permissions/groups", 0755)
 	os.MkdirAll("permissions/players", 0755)
 	os.WriteFile("permissions/groups/default.json", []byte(`{"display_name":"default","permissions":{"server.chat":true}}`), 0755)
-	LoadIPBans()
 	server.Logger.Debug("Loaded player info")
 	if !server.Config.Online && !HasArg("-no_offline_warn") {
 		server.Logger.Warn("Offline mode is insecure. You can disable this message using -no_offline_warn")

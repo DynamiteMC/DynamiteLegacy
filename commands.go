@@ -14,10 +14,13 @@ func ReloadConfig() chat.Message {
 	playerCache = make(map[string]PlayerPermissions)
 	groupCache = make(map[string]GroupPermissions)
 	newConfig := LoadConfig()
+	server.Whitelist = LoadPlayerList("whitelist.json")
+	server.OPs = LoadPlayerList("ops.json")
+	server.BannedPlayers = LoadPlayerList("banned_players.json")
+	server.BannedIPs = LoadIPBans()
 	if newConfig.Whitelist.Enable && newConfig.Whitelist.Enforce {
-		whitelist := LoadPlayerList("whitelist.json")
 		wmap := make(map[string]bool)
-		for _, p := range whitelist {
+		for _, p := range server.Whitelist {
 			wmap[p.UUID] = true
 		}
 		for i := 0; i < len(server.Players) && !wmap[server.PlayerIDs[i]]; i++ {

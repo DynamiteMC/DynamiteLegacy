@@ -77,22 +77,19 @@ func LoadIPBans() []string {
 */
 
 func ValidatePlayer(name string, id string, ip string) int {
-	whitelist := LoadPlayerList("whitelist.json")
-	bannedPlayers := LoadPlayerList("banned_players.json")
-	bannedIPs := LoadIPBans()
-	for _, player := range bannedPlayers {
+	for _, player := range server.BannedPlayers {
 		if player.UUID == id {
 			return 2
 		}
 	}
-	for _, i := range bannedIPs {
+	for _, i := range server.BannedIPs {
 		if i == ip {
 			return 2
 		}
 	}
 	if server.Config.Whitelist.Enable {
 		d := false
-		for _, player := range whitelist {
+		for _, player := range server.Whitelist {
 			if player.UUID == id {
 				d = true
 				break
