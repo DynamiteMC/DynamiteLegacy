@@ -11,6 +11,8 @@ import (
 )
 
 func ReloadConfig() chat.Message {
+	playerCache = make(map[string]PlayerPermissions)
+	groupCache = make(map[string]GroupPermissions)
 	newConfig := LoadConfig()
 	if newConfig.Whitelist.Enable && newConfig.Whitelist.Enforce {
 		whitelist := LoadPlayerList("whitelist.json")
