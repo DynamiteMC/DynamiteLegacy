@@ -107,10 +107,10 @@ func (server Server) BroadcastMessage(message chat.Message) {
 	}
 }
 
-func (server Server) GetPrefixSuffix(playerId string) (string, string) {
+func (server Server) GetGroup(playerId string) (string, string, string) {
 	player := getPlayer(playerId)
 	group := getGroup(player.Group)
-	return group.Prefix, group.Suffix
+	return group.DisplayName, group.Prefix, group.Suffix
 }
 
 func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message) {
@@ -165,15 +165,16 @@ func (playerlist Playerlist) RemovePlayer(player Player) {
 }
 
 func (playerlist Playerlist) GetTexts(player Player) (string, string) {
-	prefix, suffix := server.GetPrefixSuffix(player.UUID)
-	header := ParsePlaceholders(strings.Join(server.Config.Tablist.Header, "\n"), Placeholders{PlayerName: player.Name, PlayerPrefix: prefix})
-	footer := ParsePlaceholders(strings.Join(server.Config.Tablist.Footer, "\n"), Placeholders{PlayerName: player.Name, PlayerSuffix: suffix})
+	group, prefix, suffix := server.GetGroup(player.UUID)
+	header := ParsePlaceholders(strings.Join(server.Config.Tablist.Header, "\n"), Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerGroup: group})
+	footer := ParsePlaceholders(strings.Join(server.Config.Tablist.Footer, "\n"), Placeholders{PlayerName: player.Name, PlayerSuffix: suffix, PlayerGroup: group})
 	return header, footer
 }
 
 type Placeholders struct {
 	PlayerName   string
 	Message      string
+	PlayerGroup  string
 	PlayerPrefix string
 	PlayerSuffix string
 }
@@ -183,5 +184,6 @@ func ParsePlaceholders(str string, placeholders Placeholders) string {
 	str = strings.ReplaceAll(str, "%message%", placeholders.Message)
 	str = strings.ReplaceAll(str, "%player_prefix%", placeholders.PlayerPrefix)
 	str = strings.ReplaceAll(str, "%player_suffix%", placeholders.PlayerSuffix)
+	str = strings.ReplaceAll(str, "%player_group%", placeholders.PlayerGroup)
 	return str
 }

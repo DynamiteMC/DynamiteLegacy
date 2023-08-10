@@ -30,7 +30,9 @@ func main() {
 	LoadPlayerList("whitelist.json")
 	LoadPlayerList("ops.json")
 	LoadPlayerList("banned_players.json")
-	os.Mkdir("permissions", 0755)
+	os.MkdirAll("permissions/groups", 0755)
+	os.MkdirAll("permissions/players", 0755)
+	os.WriteFile("permissions/groups/default.json", []byte(`{"display_name":"default","permissions":{"server.chat":true}}`), 0755)
 	LoadIPBans()
 	server.Logger.Debug("Loaded player info")
 	if !server.Config.Online && !HasArg("-no_offline_warn") {

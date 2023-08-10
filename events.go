@@ -47,9 +47,9 @@ func OnPlayerJoin(params ...interface{}) {
 		playerContainer.Refresh()
 	}
 
-	prefix, suffix := server.GetPrefixSuffix(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID)
 
-	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerJoin, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix})))
+	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerJoin, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 	server.Playerlist.AddPlayer(player)
 }
 
@@ -66,9 +66,9 @@ func OnPlayerLeave(params ...interface{}) {
 		playerContainer.Refresh()
 	}
 
-	prefix, suffix := server.GetPrefixSuffix(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID)
 
-	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerLeave, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix})))
+	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerLeave, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 	server.Playerlist.RemovePlayer(player)
 }
 
@@ -82,9 +82,9 @@ func OnPlayerChatMessage(params ...interface{}) {
 	}
 	content := params[1].(pk.String)
 
-	prefix, suffix := server.GetPrefixSuffix(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID)
 
-	data := ParsePlaceholders(server.Config.Chat.Format, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, Message: fmt.Sprint(content)})
+	data := ParsePlaceholders(server.Config.Chat.Format, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, Message: fmt.Sprint(content), PlayerGroup: group})
 	if server.Config.Chat.Colors && server.HasPermissions(player.UUID, []string{"server.chat.colors"}) {
 		data = strings.ReplaceAll(data, "&", "§")
 	}

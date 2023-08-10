@@ -23,7 +23,7 @@ type PlayerPermissions struct {
 }
 
 type GroupPermissions struct {
-	DisplayName string          `json:"name"`
+	DisplayName string          `json:"display_name"`
 	Prefix      string          `json:"prefix"`
 	Suffix      string          `json:"suffix"`
 	Permissions map[string]bool `json:"permissions"`
@@ -35,7 +35,7 @@ func getPlayer(playerId string) PlayerPermissions {
 	}
 	d, err := os.ReadFile(fmt.Sprintf("permissions/players/%s.json", playerId))
 	if err != nil {
-		os.WriteFile(fmt.Sprintf("permissions/players/%s.json", playerId), []byte(`{"permissions":{"server.chat":true}}`), 0755)
+		os.WriteFile(fmt.Sprintf("permissions/players/%s.json", playerId), []byte(`{"group":"default"}`), 0755)
 		return PlayerPermissions{}
 	}
 	var data PlayerPermissions
