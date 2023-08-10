@@ -86,9 +86,9 @@ func getNetworkRegistry(protocol pk.VarInt) (reg registry.NetworkCodec) {
 			data, _ := registries.ReadFile("registry/1.20.nbt")
 			nbt.Unmarshal(data, &reg)
 		}
-	default:
+	case 762:
 		{
-			data, _ := os.ReadFile("registry/1.19.nbt")
+			data, _ := os.ReadFile("registry/1.19.4.nbt")
 			nbt.Unmarshal(data, &reg)
 		}
 	}

@@ -25,15 +25,19 @@ func ReloadConfig() chat.Message {
 			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundDisconnect, chat.Text(server.Config.Messages.NotInWhitelist)))
 			player.Connection.Close()
 			server.Events.Emit("PlayerLeave", player)
-			server.Logger.Info("["+player.IP+"]", "Player", player.Name, "("+player.UUID+")", "disconnected")
 		}
 	}
-	return chat.Text("Reloaded config successfully")
+	return chat.Text(server.Config.Messages.ReloadComplete)
 }
 
 func CreateSTDINReader() {
 	reader := bufio.NewReader(os.Stdin)
 	command, _ := reader.ReadString('\n')
+	command = strings.TrimSpace(command)
+	if command == "" {
+		go CreateSTDINReader()
+		return
+	}
 	server.Logger.Print(server.Command("console", command))
 	go CreateSTDINReader()
 }
@@ -77,6 +81,10 @@ func (server Server) Command(executor string, cmd string) chat.Message {
 	case "stop":
 		{
 			go func() {
+				for _, player := range server.Players {
+					player.Connection.WritePacket(pk.Marshal(packetid.ClientboundDisconnect, chat.Text(server.Config.Messages.ServerClosed)))
+					player.Connection.Close()
+				}
 				os.Exit(0)
 			}()
 			return chat.Text("Shutting down server...")

@@ -36,6 +36,8 @@ type Messages struct {
 	ProtocolNew             string `yaml:"protocol_new"`
 	ProtocolOld             string `yaml:"protocol_old"`
 	InsufficientPermissions string `yaml:"insufficient_permissions"`
+	ReloadComplete          string `yaml:"reload_complete"`
+	ServerClosed            string `yaml:"server_closed"`
 }
 
 type Icon struct {
@@ -109,7 +111,9 @@ func LoadConfig() *Config {
 				UnknownCommand:          "§cUnknown command. Please use '/help' for a list of commands.",
 				ProtocolNew:             "Your protocol is too new!",
 				ProtocolOld:             "Your protocol is too old!",
-				InsufficientPermissions: "§cYou aren't permitted to use this command",
+				InsufficientPermissions: "§cYou aren't permitted to use this command.",
+				ReloadComplete:          "§aReload complete.",
+				ServerClosed:            "Server closed.",
 			},
 			Icon: Icon{
 				Path:   "server-icon.png",
