@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	"net"
 
@@ -69,7 +71,8 @@ type Argument struct {
 	Redirect            int
 	RequiredPermissions []string
 	SuggestionsType     string
-	ParserID            string
+	ParserID            int
+	Optional            bool
 }
 
 type Command struct {
@@ -77,7 +80,6 @@ type Command struct {
 	Redirect            int
 	RequiredPermissions []string
 	Arguments           []Argument
-	Executable          bool
 }
 
 type Player struct {
@@ -109,6 +111,58 @@ type Server struct {
 	TCPListener   *mcnet.Listener
 	UDPListener   *net.UDPConn
 	EntityCounter int
+}
+
+type CommandGraph struct{}
+
+func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
+	entries := []pk.Tuple{{}}
+	index := 1
+	var rootChildren []int32
+	for _, command := range Commands {
+		var children []int32
+		for i, argument := range command.Arguments {
+			flags := 0x02
+			if index+1 == len(command.Arguments) || (len(command.Arguments) > i+1 && command.Arguments[i+1].Optional) {
+				flags |= 0x04
+			}
+			if argument.SuggestionsType != "" {
+				flags |= 0x10
+			}
+			entries = append(entries, pk.Tuple{
+				pk.Byte(flags),
+				pk.Array([]interface{}{}),
+				pk.String(argument.Name),
+				pk.VarInt(argument.ParserID),
+				pk.Tuple{},
+				pk.Opt{
+					Has:   argument.SuggestionsType != "",
+					Field: pk.String(argument.SuggestionsType),
+				},
+			})
+			index += 1
+			children = append(children, int32(index))
+		}
+		flags := 0x01
+		if len(children) == 0 {
+			flags |= 0x04
+		}
+		entries = append(entries, pk.Tuple{
+			pk.Byte(flags),
+			pk.Array((*[]pk.VarInt)(unsafe.Pointer(&children))),
+			pk.String(command.Name),
+		})
+		rootChildren = append(rootChildren, int32(index))
+		index += 1
+	}
+	entries[0] = pk.Tuple{
+		pk.Byte(0x0),
+		pk.Array((*[]pk.VarInt)(unsafe.Pointer(&rootChildren))),
+	}
+	return pk.Tuple{
+		pk.Array(entries),
+		pk.VarInt(0),
+	}.WriteTo(w)
 }
 
 func (emitter Events) AddListener(key string, action func(...interface{})) {

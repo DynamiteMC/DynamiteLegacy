@@ -50,22 +50,19 @@ var Commands = map[string]Command{
 	"stop": {
 		Name:                "stop",
 		RequiredPermissions: []string{"server.stop"},
-		Executable:          true,
 	},
 	"reload": {
 		Name:                "reload",
 		RequiredPermissions: []string{"server.reload"},
-		Executable:          true,
 	},
 	"op": {
 		Name:                "op",
 		RequiredPermissions: []string{"server.op"},
-		Executable:          false,
 		Arguments: []Argument{
 			{
 				Name:            "player",
 				SuggestionsType: "minecraft:ask_server",
-				ParserID:        "minecraft:entity",
+				ParserID:        6,
 			},
 		},
 	},
