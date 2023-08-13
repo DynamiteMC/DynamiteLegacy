@@ -15,11 +15,11 @@ Feel free to contribute by making an issue or pull request
 - [x] Permissions
 - [x] Chunk loading (buggy)
 - [x] Commands (barely)
-- [] Entities
-- [] Particles
-- [] Inventory
-- [] Crafting
-- [] Placing blocks 
+- [ ] Entities
+- [ ] Particles
+- [ ] Inventory
+- [ ] Crafting
+- [ ] Placing blocks 
 
 ## Tested Versions
 1.19.4 (762)
