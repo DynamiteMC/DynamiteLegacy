@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -11,7 +10,6 @@ import (
 
 	"encoding/binary"
 	"fmt"
-	"image"
 
 	_ "image/png"
 	"os"
@@ -21,11 +19,13 @@ import (
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
+	"github.com/Tnze/go-mc/level"
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/offline"
 	"github.com/Tnze/go-mc/registry"
+	"github.com/Tnze/go-mc/save/region"
 	"github.com/Tnze/go-mc/server/auth"
 	"github.com/Tnze/go-mc/yggdrasil/user"
 )
@@ -113,6 +113,17 @@ func (d *MojangLoginHandler) getPrivateKey() (key *rsa.PrivateKey, err error) {
 		d.privateKey.Store(key)
 	}
 	return
+}
+
+func TCPListen() {
+	var err error
+	server.TCPListener, err = net.ListenMC(server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
+	if err != nil {
+		server.Logger.Error("[TCP] Failed to listen:", err.Error())
+		os.Exit(1)
+	}
+
+	server.Logger.Info("[TCP] Listening on " + server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
 }
 
 func HandleTCPRequest(conn net.Conn) {
@@ -231,7 +242,8 @@ func HandleTCPRequest(conn net.Conn) {
 					gamemode = 3
 				}
 				hashedSeed := [8]byte{}
-				fields := []pk.FieldEncoder{pk.Int(0),
+				fields := []pk.FieldEncoder{
+					pk.Int(server.NewEntityID()),
 					pk.Boolean(server.Config.Hardcore),
 					pk.UnsignedByte(gamemode),
 					pk.Byte(-1),
@@ -261,7 +273,7 @@ func HandleTCPRequest(conn net.Conn) {
 					))
 				}
 				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
-					pk.Position{X: 100, Y: 100, Z: 100},
+					pk.Position{X: 0, Y: 0, Z: 0},
 					pk.Float(50)))
 				var lastKeepAliveId int
 				player := Player{
@@ -273,12 +285,16 @@ func HandleTCPRequest(conn net.Conn) {
 					IP:         ip,
 				}
 				var (
-					joined = false
-					left   = false
+					joined     = false
+					left       = false
+					lastPacket pk.Packet
 				)
 				for {
 					var packet pk.Packet
 					conn.ReadPacket(&packet)
+					if len(packet.Data) == len(lastPacket.Data) {
+						continue
+					}
 					switch packet.ID {
 					case 8:
 						{
@@ -349,6 +365,45 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							server.Players[idString] = player
 						}
+					case int32(packetid.ServerboundMovePlayerPos):
+						{
+							var (
+								x pk.Double
+								y pk.Double
+								z pk.Double
+							)
+							packet.Scan(&x, &y, &z)
+							var (
+								lx pk.Double
+								ly pk.Double
+								lz pk.Double
+							)
+							lastPacket.Scan(&lx, &ly, &lz)
+							var (
+								xPos     = int(x)
+								yPos     = int(y)
+								zPos     = int(z)
+								lastXPos = int(lx)
+								lastYPos = int(ly)
+								lastZPos = int(lz)
+							)
+							if fmt.Sprint(xPos) == fmt.Sprint(lastXPos) && fmt.Sprint(yPos) == fmt.Sprint(lastYPos) && fmt.Sprint(zPos) == fmt.Sprint(lastZPos) {
+								continue
+							}
+
+							cx, cz := region.At(int(x), int(z))
+							server.Logger.Debug("["+ip+"]", "Player", name, "("+idString+")", "moved. ("+fmt.Sprint(xPos), fmt.Sprint(yPos), fmt.Sprint(zPos)+")")
+							chunkPos := level.ChunkPos([2]int32{int32(cx), int32(cz)})
+							chunk := server.GetChunk([2]int32{int32(xPos), int32(zPos)})
+							if chunk == nil {
+								continue
+							}
+							conn.WritePacket(pk.Marshal(
+								packetid.ClientboundLevelChunkWithLight,
+								chunkPos,
+								chunk,
+							))
+						}
 					case packetid.LoginDisconnect:
 						{
 							server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "disconnected")
@@ -360,6 +415,7 @@ func HandleTCPRequest(conn net.Conn) {
 							return
 						}
 					}
+					lastPacket = packet
 				}
 			}
 		}
@@ -382,10 +438,16 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			for _, player := range server.Players {
 				players = append(players, player)
 			}
+			protocol := Protocol
+			if server.Config.TCP.MaxProtocol < int(protocol) {
+				protocol = pk.VarInt(server.Config.TCP.MaxProtocol)
+			} else if server.Config.TCP.MinProtocol > int(protocol) {
+				protocol = pk.VarInt(server.Config.TCP.MinProtocol)
+			}
 			response := StatusResponse{
 				Version: Version{
-					Name:     "GoCraftServer",
-					Protocol: int(Protocol),
+					Name:     "GoCraft",
+					Protocol: int(protocol),
 				},
 				Players: Players{
 					Max:    max,
@@ -399,21 +461,21 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 				PreviewsChat:       true,
 			}
 			if server.Config.Icon.Enable {
-				data, err := os.ReadFile(server.Config.Icon.Path)
-				if err != nil {
-					server.Logger.Warn("Server icon is enabled but wasn't found; ignoring")
-				} else {
-					image, format, _ := image.DecodeConfig(bytes.NewReader(data))
-					if format == "png" {
-						if image.Width == 64 && image.Height == 64 {
-							icon := base64.StdEncoding.EncodeToString(data)
-							response.Favicon = fmt.Sprintf("data:image/png;base64,%s", icon)
-						} else {
+				success, code, data := server.GetFavicon()
+				if !success {
+					switch code {
+					case FAVICON_NOTFOUND:
+						{
+							server.Logger.Warn("Server icon is enabled but wasn't found; ignoring")
+						}
+					case FAVICON_INVALID_FORMAT, FAVICON_INVALID_DIMENSIONS:
+						{
 							server.Logger.Debug("Server icon is not a 64x64 png file; ignoring")
 						}
-					} else {
-						server.Logger.Debug("Server icon is not a 64x64 png file; ignoring")
 					}
+				} else {
+					icon := base64.StdEncoding.EncodeToString(data)
+					response.Favicon = fmt.Sprintf("data:image/png;base64,%s", icon)
 				}
 			}
 			conn.WritePacket(pk.Marshal(0x00, pk.String(CreateStatusResponse(response))))

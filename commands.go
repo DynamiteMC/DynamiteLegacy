@@ -18,6 +18,7 @@ func ReloadConfig() chat.Message {
 	server.OPs = LoadPlayerList("ops.json")
 	server.BannedPlayers = LoadPlayerList("banned_players.json")
 	server.BannedIPs = LoadIPBans()
+	server.Favicon = []byte{}
 	if newConfig.Whitelist.Enable && newConfig.Whitelist.Enforce {
 		wmap := make(map[string]bool)
 		for _, p := range server.Whitelist {

@@ -99,7 +99,7 @@ func LoadConfig() *Config {
 			},
 			Gamemode:   "survival",
 			Hardcore:   false,
-			MaxPlayers: 100,
+			MaxPlayers: 200,
 			Online:     true,
 			Messages: Messages{
 				NotInWhitelist:          "You are not whitelisted.",

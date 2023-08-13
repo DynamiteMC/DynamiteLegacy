@@ -23,6 +23,24 @@ func OnPlayerJoin(params ...interface{}) {
 	header, footer := server.Playerlist.GetTexts(player)
 	connection.WritePacket(pk.Marshal(0x17, pk.Identifier("minecraft:brand"), pk.String("GoCraft")))
 	connection.WritePacket(pk.Marshal(packetid.ClientboundTabList, chat.Text(header), chat.Text(footer)))
+	fields := []pk.FieldEncoder{
+		chat.Text(server.Config.MOTD),
+		pk.Boolean(false),
+	}
+	if server.Config.Icon.Enable {
+		success, _, data := server.GetFavicon()
+		if success {
+			fields[1] = pk.Boolean(true)
+			fields = append(fields, pk.ByteArray(data))
+		}
+	}
+	fields = append(fields, pk.Boolean(true))
+	connection.WritePacket(pk.Marshal(packetid.ClientboundServerData, fields...))
+	connection.WritePacket(pk.Marshal(
+		packetid.ClientboundSetChunkCacheCenter,
+		pk.VarInt(0),
+		pk.VarInt(0),
+	))
 	/*connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, pk.Array([]pk.FieldEncoder{
 		pk.Array([]pk.FieldEncoder{
 			pk.Byte(0x0),
