@@ -11,7 +11,7 @@ func UDPListen() {
 	var err error
 	server.UDPListener, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(server.Config.UDP.ServerIP), Port: server.Config.UDP.ServerPort})
 	if err != nil {
-		server.Logger.Error("[UDP] Failed to listen:", err.Error())
+		server.Logger.Error("[UDP] Failed to listen: %s", err.Error())
 		os.Exit(1)
 	}
 

@@ -36,24 +36,22 @@ func main() {
 				if server.Config.TCP.Enable {
 					conn, err := server.TCPListener.Accept()
 					if err != nil {
-						fmt.Println("Error accepting: ", err.Error())
-						os.Exit(1)
+						continue
 					}
 					go HandleTCPRequest(conn)
 				}
 			}
 		}()
 		server.Logger.Info("Launching GUI panel")
-		server.Logger.Info("Done!", "("+fmt.Sprint(time.Now().Unix()-server.StartTime)+"s)")
+		server.Logger.Info("Done! (%d)", time.Now().Unix()-server.StartTime)
 		LaunchGUI().ShowAndRun()
 	} else {
-		server.Logger.Info("Done!", "("+fmt.Sprint(time.Now().Unix()-server.StartTime)+"s)")
+		server.Logger.Info("Done! (%d)", time.Now().Unix()-server.StartTime)
 		for {
 			if server.Config.TCP.Enable {
 				conn, err := server.TCPListener.Accept()
 				if err != nil {
-					fmt.Println("Error accepting tcp request: ", err.Error())
-					os.Exit(1)
+					continue
 				}
 				go HandleTCPRequest(conn)
 			}

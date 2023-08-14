@@ -13,13 +13,14 @@ Feel free to contribute by making an issue or pull request
 - [x] Tab
 - [x] Chat
 - [x] Permissions
-- [x] Chunk loading (buggy)
-- [x] Commands (barely)
+- [WIP] Chunk loading (buggy)
+- [WIP] Commands (barely)
 - [ ] Entities
 - [ ] Particles
 - [ ] Inventory
 - [ ] Crafting
 - [ ] Placing blocks 
+- [WIP] Plugins
 
 ## Tested Versions
 1.19.4 (762)

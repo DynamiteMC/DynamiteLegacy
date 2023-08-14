@@ -41,19 +41,6 @@ func OnPlayerJoin(params ...interface{}) {
 		pk.VarInt(0),
 		pk.VarInt(0),
 	))
-	/*connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, pk.Array(
-		[]pk.Tuple{
-			{
-				pk.Byte(0x0),
-				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{1}))),
-			},
-			{
-				pk.Byte(0x1),
-				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{}))),
-				pk.String("me"),
-			},
-		},
-	), pk.VarInt(0)))*/
 	connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{}))
 
 	max := fmt.Sprint(server.Config.MaxPlayers)

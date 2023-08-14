@@ -119,11 +119,11 @@ func TCPListen() {
 	var err error
 	server.TCPListener, err = net.ListenMC(server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
 	if err != nil {
-		server.Logger.Error("[TCP] Failed to listen:", err.Error())
+		server.Logger.Error("[TCP] Failed to listen: %s", err.Error())
 		os.Exit(1)
 	}
 
-	server.Logger.Info("[TCP] Listening on " + server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
+	server.Logger.Info("[TCP] Listening on %s:%d", server.Config.TCP.ServerIP, server.Config.TCP.ServerPort)
 }
 
 func HandleTCPRequest(conn net.Conn) {
@@ -132,7 +132,7 @@ func HandleTCPRequest(conn net.Conn) {
 	conn.ReadPacket(&packet)
 	ip := conn.Socket.RemoteAddr().String()
 	if packet.ID == 0x00 { // 1.7+
-		server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent handshake")
+		server.Logger.Debug("[TCP] ([%s] -> Server) Sent handshake", ip)
 		var (
 			Protocol, Intention pk.VarInt
 			ServerAddress       pk.String
@@ -165,7 +165,7 @@ func HandleTCPRequest(conn net.Conn) {
 					uuid pk.UUID
 				)
 				p.Scan(&name, &uuid)
-				server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent LoginStart packet. Username:", name)
+				server.Logger.Debug("[TCP] ([%s] -> Server) Sent LoginStart packet. Username: %s", ip, name)
 				var id pk.UUID
 				var idString string
 				properties := []user.Property{}
@@ -189,7 +189,7 @@ func HandleTCPRequest(conn net.Conn) {
 					id = pk.UUID(offline.NameToUUID(string(name)))
 					idString = fmt.Sprint(offline.NameToUUID(string(name)))
 				}
-				server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "is attempting to join.")
+				server.Logger.Info("[%s] Player %s (%s) is attempting to join", ip, name, idString)
 				valid := ValidatePlayer(fmt.Sprint(name), idString, strings.Split(ip, ":")[0])
 				if valid != 0 {
 					var reason string
@@ -217,7 +217,7 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					}
 					r := chat.Text(reasonNice)
-					server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "attempt failed. reason:", reason)
+					server.Logger.Info("[%s] Player %s (%s) attempt failed. reason: %s", ip, name, idString, reason)
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, r))
 				}
 				loginSuccessFields := []pk.FieldEncoder{
@@ -296,12 +296,12 @@ func HandleTCPRequest(conn net.Conn) {
 						continue
 					}
 					switch packet.ID {
-					case 8:
+					case int32(packetid.ServerboundClientInformation):
 						{
 							if joined {
 								continue
 							}
-							server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "joined the server")
+							server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 							server.Players[idString] = player
 							server.PlayerIDs = append(server.PlayerIDs, idString)
 							packet.Scan(&player.Client.Locale,
@@ -322,7 +322,7 @@ func HandleTCPRequest(conn net.Conn) {
 								for range ticker.C {
 									lastKeepAliveId = r.Intn(1000)
 									conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
-									server.Logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent KeepAlive packet")
+									server.Logger.Debug("[TCP] (Server -> [%s]) Sent KeepAlive packet", ip)
 								}
 							}()
 						}
@@ -335,7 +335,7 @@ func HandleTCPRequest(conn net.Conn) {
 								server.Events.Emit("PlayerLeave", player)
 								break
 							}
-							server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent KeepAlive packet")
+							server.Logger.Debug("[TCP] ([%s] -> Server) Sent KeepAlive packet", ip)
 						}
 					case int32(packetid.ServerboundChatCommand):
 						{
@@ -365,7 +365,7 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							server.Players[idString] = player
 						}
-					case int32(packetid.ServerboundMovePlayerPos):
+					case int32(packetid.ServerboundMovePlayerPos), int32(packetid.ServerboundMovePlayerPosRot):
 						{
 							var (
 								x pk.Double
@@ -374,25 +374,13 @@ func HandleTCPRequest(conn net.Conn) {
 							)
 							packet.Scan(&x, &y, &z)
 							var (
-								lx pk.Double
-								ly pk.Double
-								lz pk.Double
+								xPos = int(x)
+								yPos = int(y)
+								zPos = int(z)
 							)
-							lastPacket.Scan(&lx, &ly, &lz)
-							var (
-								xPos     = int(x)
-								yPos     = int(y)
-								zPos     = int(z)
-								lastXPos = int(lx)
-								lastYPos = int(ly)
-								lastZPos = int(lz)
-							)
-							if fmt.Sprint(xPos) == fmt.Sprint(lastXPos) && fmt.Sprint(yPos) == fmt.Sprint(lastYPos) && fmt.Sprint(zPos) == fmt.Sprint(lastZPos) {
-								continue
-							}
 
-							cx, cz := region.At(int(x), int(z))
-							server.Logger.Debug("["+ip+"]", "Player", name, "("+idString+")", "moved. ("+fmt.Sprint(xPos), fmt.Sprint(yPos), fmt.Sprint(zPos)+")")
+							cx, cz := region.At(xPos, zPos)
+							server.Logger.Debug("[%s] Player %s (%s) moved (%d %d %d)", ip, name, idString, xPos, yPos, zPos)
 							chunkPos := level.ChunkPos([2]int32{int32(cx), int32(cz)})
 							chunk := server.GetChunk([2]int32{int32(xPos), int32(zPos)})
 							if chunk == nil {
@@ -406,7 +394,7 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					case packetid.LoginDisconnect:
 						{
-							server.Logger.Info("["+ip+"]", "Player", name, "("+idString+")", "disconnected")
+							server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
 							conn.Close()
 							if joined && !left {
 								server.Events.Emit("PlayerLeave", player)
@@ -429,7 +417,7 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 		conn.ReadPacket(&p)
 		switch p.ID {
 		case packetid.StatusRequest:
-			server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusRequest packet")
+			server.Logger.Debug("[TCP] ([%s] -> Server) Sent StatusRequest packet", ip)
 			max := server.Config.MaxPlayers
 			if max == -1 {
 				max = len(server.Players) + 1
@@ -479,11 +467,11 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 				}
 			}
 			conn.WritePacket(pk.Marshal(0x00, pk.String(CreateStatusResponse(response))))
-			server.Logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusResponse packet")
+			server.Logger.Debug("[TCP] (Server -> [%s]) Sent StatusResponse packet", ip)
 		case packetid.StatusPingRequest:
-			server.Logger.Debug("[TCP] (["+ip+"]", "-> Server) Sent StatusPingRequest packet")
+			server.Logger.Debug("[TCP] ([%s] -> Server) Sent StatusPingRequest packet", ip)
 			conn.WritePacket(p)
-			server.Logger.Debug("[TCP] (Server -> ["+ip+"])", "Sent StatusPongResponse packet")
+			server.Logger.Debug("[TCP] (Server -> [%s]) Sent StatusPongResponse packet", ip)
 		}
 	}
 }

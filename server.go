@@ -80,6 +80,7 @@ type Command struct {
 	Redirect            int
 	RequiredPermissions []string
 	Arguments           []Argument
+	Aliases             []string
 }
 
 type Player struct {
@@ -113,51 +114,85 @@ type Server struct {
 	EntityCounter int
 }
 
+type Node struct {
+	Parent     int
+	Children   []int
+	Data       interface{}
+	EntryIndex int
+}
+
 type CommandGraph struct{}
 
 func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 	entries := []pk.Tuple{{}}
-	index := 1
 	var rootChildren []int32
-	for _, command := range Commands {
-		var children []int32
-		for i, argument := range command.Arguments {
-			flags := 0x02
-			if index+1 == len(command.Arguments) || (len(command.Arguments) > i+1 && command.Arguments[i+1].Optional) {
+	var nodes []Node
+	i := 1
+	for pair := Commands.Oldest(); pair != nil; pair = pair.Next() {
+		command := pair.Value
+		nodes = append(nodes, Node{Parent: 0, Data: command})
+		for _, argument := range command.Arguments {
+			nodes = append(nodes, Node{Parent: i, Data: argument})
+		}
+		i += 1
+	}
+	for index, node := range nodes {
+		command, isCommand := node.Data.(Command)
+		argument, isArgument := node.Data.(Argument)
+		if isCommand {
+			flags := 0x01
+			if len(command.Arguments) == 0 {
 				flags |= 0x04
 			}
-			if argument.SuggestionsType != "" {
+			nodes[index].EntryIndex = len(entries)
+			entries = append(entries, pk.Tuple{
+				pk.Byte(flags),
+				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{}))),
+				pk.String(command.Name),
+			})
+			rootChildren = append(rootChildren, int32(index+1))
+		} else if isArgument {
+			flags := 0x02
+			//if index+1 == len(command.Arguments) || (len(command.Arguments) > i+1 && command.Arguments[i+1].Optional) {
+			//	flags |= 0x04
+			//}
+			/*if argument.SuggestionsType != "" {
 				flags |= 0x10
+			}*/
+			parent := nodes[node.Parent-1]
+			parent.Children = append(parent.Children, len(entries))
+			entries[parent.EntryIndex] = pk.Tuple{
+				pk.Byte(0x01),
+				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&parent.Children))),
+				pk.String(parent.Data.(Command).Name),
 			}
 			entries = append(entries, pk.Tuple{
 				pk.Byte(flags),
-				pk.Array([]interface{}{}),
+				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{}))),
 				pk.String(argument.Name),
 				pk.VarInt(argument.ParserID),
-				pk.Tuple{},
-				pk.Opt{
-					Has:   argument.SuggestionsType != "",
+				/*pk.Opt{
+					Has:   func() bool { return argument.SuggestionsType != "" },
 					Field: pk.String(argument.SuggestionsType),
-				},
+				},*/
 			})
-			index += 1
-			children = append(children, int32(index))
 		}
-		flags := 0x01
-		if len(children) == 0 {
-			flags |= 0x04
-		}
-		entries = append(entries, pk.Tuple{
-			pk.Byte(flags),
-			pk.Array((*[]pk.VarInt)(unsafe.Pointer(&children))),
-			pk.String(command.Name),
-		})
-		rootChildren = append(rootChildren, int32(index))
-		index += 1
 	}
 	entries[0] = pk.Tuple{
 		pk.Byte(0x0),
 		pk.Array((*[]pk.VarInt)(unsafe.Pointer(&rootChildren))),
+	}
+	for index, entry := range entries {
+		var buff bytes.Buffer
+		entry.WriteTo(&buff)
+		packet := pk.Packet{ID: 0, Data: buff.Bytes()}
+		var (
+			f pk.Byte
+			c pk.ByteArray
+			n pk.String
+		)
+		packet.Scan(&f, &c, &n)
+		fmt.Printf("Index %d | Flags %d | Children %v | %s\n", index, f, c, n)
 	}
 	return pk.Tuple{
 		pk.Array(entries),
@@ -307,10 +342,10 @@ func (server Server) LoadAllPlugins() {
 }
 
 func (server Server) LoadPlugin(fileName string) {
-	server.Logger.Info("Loading plugin", fileName)
+	server.Logger.Info("Loading plugin %s", fileName)
 	path, err := exec.LookPath(fmt.Sprintf("./plugins/%s", fileName))
 	if err != nil {
-		server.Logger.Error("Could not load plugin", fileName)
+		server.Logger.Error("Could not load plugin %s", fileName)
 	}
 	cmd := exec.Command(path)
 	stdout, _ := cmd.StdoutPipe()
@@ -321,7 +356,7 @@ func (server Server) LoadPlugin(fileName string) {
 			command := scanner.Text()
 			if !strings.HasPrefix(command, "GoCraft|Message") {
 				cmd.Process.Kill()
-				server.Logger.Error("Failed to load plugin", fileName, "Reason: invalid message")
+				server.Logger.Error("Failed to load plugin %s Reason: invalid message", fileName)
 				return
 			}
 			command = strings.TrimSpace(strings.TrimPrefix(command, "GoCraft|Message"))
@@ -329,7 +364,7 @@ func (server Server) LoadPlugin(fileName string) {
 			code, err := strconv.Atoi(c)
 			if err != nil {
 				cmd.Process.Kill()
-				server.Logger.Error("Failed to load plugin", fileName, "Reason: invalid message")
+				server.Logger.Error("Failed to load plugin %s Reason: invalid message", fileName)
 				return
 			}
 			command = strings.TrimSpace(strings.TrimPrefix(command, c))
@@ -341,7 +376,7 @@ func (server Server) LoadPlugin(fileName string) {
 					if err != nil {
 						return
 					}
-					server.Logger.Print(message)
+					server.Logger.Print("%v", message)
 				}
 			}
 		}
