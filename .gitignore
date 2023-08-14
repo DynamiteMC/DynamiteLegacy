@@ -3,7 +3,6 @@ banned_ips.json
 banned_players.json
 ops.json
 gocraft.yml
-go.sum
 whitelist.json
 gocraft.exe
 server-icon.png
