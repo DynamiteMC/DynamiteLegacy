@@ -182,7 +182,7 @@ func (server *Server) Command(executor string, content string) chat.Message {
 				pk.Float(mode),
 			))
 			server.BroadcastMessageAdmin(executor, chat.Text(fmt.Sprintf("§7[%s: Set %s's gamemode to %s]", executorName, player.Name, gamemode)))
-			if executor == id {
+			if executor == player.UUID.String {
 				return chat.Text(fmt.Sprintf("Set own gamemode to %s", gamemode))
 			} else {
 				return chat.Text(fmt.Sprintf("Set %s's gamemode to %s", player.Name, gamemode))
