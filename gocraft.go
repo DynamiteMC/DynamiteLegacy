@@ -28,14 +28,14 @@ var server = Server{
 						Name: "minecraft:gamemode",
 					},
 				},
-				/*{
+				{
 					Name: "player",
 					Parser: Parser{
 						ID:         6,
 						Name:       "minecraft:entity",
 						Properties: pk.Byte(0x02),
 					},
-				},*/
+				},
 			},
 		},
 		"op": {

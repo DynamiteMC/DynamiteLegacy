@@ -147,22 +147,21 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 			continue
 		}
 		nodes = append(nodes, Node{Parent: 0, Data: command})
-		ci := i
 		for _, argument := range command.Arguments {
+			nodes = append(nodes, Node{Parent: i, Data: argument})
 			i++
-			nodes = append(nodes, Node{Parent: ci, Data: argument})
 		}
 		i++
 	}
 	for index, node := range nodes {
 		command, isCommand := node.Data.(Command)
 		argument, isArgument := node.Data.(Argument)
+		nodes[index].EntryIndex = len(entries)
 		if isCommand {
 			flags := 0x01
 			if len(command.Arguments) == 0 {
 				flags |= 0x04
 			}
-			nodes[index].EntryIndex = len(entries)
 			entries = append(entries, pk.Tuple{
 				pk.Byte(flags),
 				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{}))),
@@ -176,23 +175,45 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 			}
 			parent := nodes[node.Parent-1]
 			command, isCommand = parent.Data.(Command)
-			if !isCommand {
+			arg, isArg := parent.Data.(Argument)
+			if !isCommand && !isArg {
 				continue
 			}
-			var isNextArg bool
-			if len(nodes) <= i+1 {
+			//var isNextArg bool
+			/*if len(nodes) <= i+1 {
 				isNextArg = false
 			} else {
 				_, isNextArg = nodes[i+1].Data.(Argument)
-			}
-			if _, ok := parent.Data.(Command); ok && isNextArg {
+			}*/
+			/*if _, ok := parent.Data.(Command); ok && isNextArg {
 				nodes[i+1].Parent = node.Parent
-			}
+			}*/
 			parent.Children = append(parent.Children, len(entries))
-			entries[parent.EntryIndex] = pk.Tuple{
-				pk.Byte(0x01),
-				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&parent.Children))),
-				pk.String(command.Name),
+			if isCommand {
+				entries[parent.EntryIndex] = pk.Tuple{
+					pk.Byte(0x01),
+					pk.Array((*[]pk.VarInt)(unsafe.Pointer(&parent.Children))),
+					pk.String(command.Name),
+				}
+			} else if isArg {
+				fl := 0x02
+				if arg.SuggestionsType != "" {
+					fl |= 0x10
+				}
+				entries[parent.EntryIndex] = pk.Tuple{
+					pk.Byte(fl),
+					pk.Array((*[]pk.VarInt)(unsafe.Pointer(&parent.Children))),
+					pk.String(arg.Name),
+					pk.VarInt(arg.Parser.ID),
+					pk.Opt{
+						Has:   func() bool { return arg.Parser.Properties != nil },
+						Field: arg.Parser.Properties,
+					},
+					pk.Opt{
+						Has:   func() bool { return arg.SuggestionsType != "" },
+						Field: pk.String(arg.SuggestionsType),
+					},
+				}
 			}
 			entries = append(entries, pk.Tuple{
 				pk.Byte(flags),
