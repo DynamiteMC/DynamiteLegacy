@@ -1,4 +1,6 @@
 # GoCraft
+[![Discord](https://img.shields.io/discord/1141080135878070362?logo=discord)](https://discord.gg/5Yz2dR4pQj)
+
 A Minecraft server implementation written in Go
 
 This is a very experimental software and it's not yet usable
