@@ -19,7 +19,7 @@ var server = Server{
 	Commands: map[string]Command{
 		"gamemode": {
 			Name:                "gamemode",
-			RequiredPermissions: []string{"server.gamemode"},
+			RequiredPermissions: []string{"server.command.gamemode"},
 			Arguments: []Argument{
 				{
 					Name: "mode",
@@ -40,7 +40,7 @@ var server = Server{
 		},
 		"op": {
 			Name:                "op",
-			RequiredPermissions: []string{"server.op"},
+			RequiredPermissions: []string{"server.command.op"},
 			Arguments: []Argument{
 				{
 					Name: "player",
@@ -54,11 +54,11 @@ var server = Server{
 		},
 		"reload": {
 			Name:                "reload",
-			RequiredPermissions: []string{"server.reload"},
+			RequiredPermissions: []string{"server.command.reload"},
 		},
 		"stop": {
 			Name:                "stop",
-			RequiredPermissions: []string{"server.stop"},
+			RequiredPermissions: []string{"server.command.stop"},
 		},
 	},
 }

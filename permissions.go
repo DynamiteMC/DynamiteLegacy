@@ -8,8 +8,10 @@ import (
 
 /*
 	Permissions:
-		server.stop - /stop command
-		server.reload - /reload command
+		server.command.stop - /stop command
+		server.command.reload - /reload command
+		server.command.op - /op command
+		server.command.gamemode - /gamemode command
 		server.chat - Use chat
 		server.chat.colors - Use chat colors
 */
