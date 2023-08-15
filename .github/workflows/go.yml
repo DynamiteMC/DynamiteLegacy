@@ -38,5 +38,5 @@ jobs:
         uses: actions/upload-artifact@v3
         if: ${{ runner.os == 'macOS' }}
         with:
-          name: GoCraft-Windows
-          path: gocraft.exe
+          name: GoCraft-macOS
+          path: gocraft
