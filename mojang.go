@@ -21,9 +21,9 @@ func (api MojangAPI) ParseUUID(uuid string) string {
 	return str
 }
 
-func (api MojangAPI) FetchUsername(username string) (bool, Player) {
+func (api MojangAPI) FetchUsername(username string) (bool, PlayerBase) {
 	resp, err := http.Get(fmt.Sprintf("https://api.mojang.com/users/profiles/minecraft/%s", username))
-	var player Player
+	var player PlayerBase
 	if err != nil {
 		return false, player
 	}
@@ -41,9 +41,9 @@ func (api MojangAPI) FetchUsername(username string) (bool, Player) {
 	return true, player
 }
 
-func (api MojangAPI) FetchUUID(uuid string) (bool, Player) {
+func (api MojangAPI) FetchUUID(uuid string) (bool, PlayerBase) {
 	resp, err := http.Get(fmt.Sprintf("https://api.mojang.com/users/profiles/minecraft/%s", uuid))
-	var player Player
+	var player PlayerBase
 	if err != nil {
 		return false, player
 	}

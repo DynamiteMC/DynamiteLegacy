@@ -88,11 +88,15 @@ type Command struct {
 	Arguments           []Argument
 }
 
+type UUID struct {
+	String string
+	Binary pk.UUID
+}
+
 type Player struct {
-	Name       string `json:"name"`
-	UUID       string `json:"id"`
-	UUIDb      pk.UUID
-	Connection mcnet.Conn
+	Name       string
+	UUID       UUID
+	Connection *mcnet.Conn
 	Properties []user.Property
 	Client     ClientData
 	IP         string
@@ -101,7 +105,9 @@ type Player struct {
 type Playerlist struct{}
 
 type Server struct {
+	Commands      map[string]Command
 	Players       map[string]Player
+	PlayerNames   map[string]string
 	PlayerIDs     []string
 	Events        Events
 	Config        *Config
@@ -127,19 +133,26 @@ type Node struct {
 	EntryIndex int
 }
 
-type CommandGraph struct{}
+type CommandGraph struct {
+	PlayerID string
+}
 
 func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 	entries := []pk.Tuple{{}}
 	var rootChildren []int32
 	var nodes []Node
 	i := 1
-	for _, command := range Commands {
-		nodes = append(nodes, Node{Parent: 0, Data: command})
-		for _, argument := range command.Arguments {
-			nodes = append(nodes, Node{Parent: i, Data: argument})
+	for _, command := range server.Commands {
+		if !server.HasPermissions(graph.PlayerID, command.RequiredPermissions) {
+			continue
 		}
-		i += 1
+		nodes = append(nodes, Node{Parent: 0, Data: command})
+		ci := i
+		for _, argument := range command.Arguments {
+			i++
+			nodes = append(nodes, Node{Parent: ci, Data: argument})
+		}
+		i++
 	}
 	for index, node := range nodes {
 		command, isCommand := node.Data.(Command)
@@ -162,18 +175,34 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 				flags |= 0x10
 			}
 			parent := nodes[node.Parent-1]
+			command, isCommand = parent.Data.(Command)
+			if !isCommand {
+				continue
+			}
+			var isNextArg bool
+			if len(nodes) <= i+1 {
+				isNextArg = false
+			} else {
+				_, isNextArg = nodes[i+1].Data.(Argument)
+			}
+			if _, ok := parent.Data.(Command); ok && isNextArg {
+				nodes[i+1].Parent = node.Parent
+			}
 			parent.Children = append(parent.Children, len(entries))
 			entries[parent.EntryIndex] = pk.Tuple{
 				pk.Byte(0x01),
 				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&parent.Children))),
-				pk.String(parent.Data.(Command).Name),
+				pk.String(command.Name),
 			}
 			entries = append(entries, pk.Tuple{
 				pk.Byte(flags),
 				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{}))),
 				pk.String(argument.Name),
 				pk.VarInt(argument.Parser.ID),
-				argument.Parser.Properties,
+				pk.Opt{
+					Has:   func() bool { return argument.Parser.Properties != nil },
+					Field: argument.Parser.Properties,
+				},
 				pk.Opt{
 					Has:   func() bool { return argument.SuggestionsType != "" },
 					Field: pk.String(argument.SuggestionsType),
@@ -322,7 +351,7 @@ func (server *Server) GetFavicon() (bool, int, []byte) {
 func (server Server) BroadcastMessage(message chat.Message) {
 	server.Logger.Print(message.String())
 	for _, player := range server.Players {
-		server.Message(player.UUID, message)
+		server.Message(player.UUID.String, message)
 	}
 }
 
@@ -385,16 +414,16 @@ func (server Server) LoadPlugin(fileName string) {
 func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message) {
 	server.Logger.Print(message.String())
 	op := LoadPlayerList("ops.json")
-	ops := make(map[string]Player)
+	ops := make(map[string]PlayerBase)
 	for i := 0; i < len(op); i++ {
-		ops[op[i].UUID] = Player{
+		ops[op[i].UUID] = PlayerBase{
 			Name: op[i].Name,
 			UUID: op[i].UUID,
 		}
 	}
 	for _, player := range server.Players {
-		if ops[player.UUID].UUID == player.UUID && player.UUID != playerId {
-			server.Message(player.UUID, message)
+		if ops[player.UUID.String].UUID == player.UUID.String && player.UUID.String != playerId {
+			server.Message(player.UUID.String, message)
 		} else {
 			continue
 		}
@@ -409,7 +438,7 @@ func (server Server) BroadcastPacket(packet pk.Packet) {
 
 func (server Server) Message(id string, message chat.Message) {
 	player := server.Players[id]
-	if player.UUID != id {
+	if player.UUID.String != id {
 		return
 	}
 	player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
@@ -424,7 +453,7 @@ func (playerlist Playerlist) AddPlayer(player Player) {
 	_, _ = addPlayerAction.WriteTo(&buf)
 	_, _ = pk.VarInt(len(server.Players)).WriteTo(&buf)
 	for _, player := range server.Players {
-		_, _ = pk.UUID(player.UUIDb).WriteTo(&buf)
+		_, _ = pk.UUID(player.UUID.Binary).WriteTo(&buf)
 		_, _ = pk.String(player.Name).WriteTo(&buf)
 		_, _ = pk.Array(player.Properties).WriteTo(&buf)
 		_, _ = pk.Boolean(true).WriteTo(&buf)
@@ -433,11 +462,11 @@ func (playerlist Playerlist) AddPlayer(player Player) {
 }
 
 func (playerlist Playerlist) RemovePlayer(player Player) {
-	server.BroadcastPacket(pk.Marshal(packetid.ClientboundPlayerInfoRemove, pk.Array([]pk.UUID{player.UUIDb})))
+	server.BroadcastPacket(pk.Marshal(packetid.ClientboundPlayerInfoRemove, pk.Array([]pk.UUID{player.UUID.Binary})))
 }
 
 func (playerlist Playerlist) GetTexts(player Player) (string, string) {
-	group, prefix, suffix := server.GetGroup(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID.String)
 	header := ParsePlaceholders(strings.Join(server.Config.Tablist.Header, "\n"), Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerGroup: group})
 	footer := ParsePlaceholders(strings.Join(server.Config.Tablist.Footer, "\n"), Placeholders{PlayerName: player.Name, PlayerSuffix: suffix, PlayerGroup: group})
 	return header, footer

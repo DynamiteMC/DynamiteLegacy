@@ -6,13 +6,61 @@ import (
 	"os"
 	"os/signal"
 	"time"
+
+	pk "github.com/Tnze/go-mc/net/packet"
 )
 
 var server = Server{
-	Config:    LoadConfig(),
-	Players:   make(map[string]Player),
-	PlayerIDs: make([]string, 0),
-	Events:    Events{_Events: make(map[string][]func(...interface{}))},
+	Config:      LoadConfig(),
+	Players:     make(map[string]Player),
+	PlayerNames: make(map[string]string),
+	PlayerIDs:   make([]string, 0),
+	Events:      Events{_Events: make(map[string][]func(...interface{}))},
+	Commands: map[string]Command{
+		"gamemode": {
+			Name:                "gamemode",
+			RequiredPermissions: []string{"server.gamemode"},
+			Arguments: []Argument{
+				{
+					Name: "mode",
+					Parser: Parser{
+						ID:   39,
+						Name: "minecraft:gamemode",
+					},
+				},
+				/*{
+					Name: "player",
+					Parser: Parser{
+						ID:         6,
+						Name:       "minecraft:entity",
+						Properties: pk.Byte(0x02),
+					},
+				},*/
+			},
+		},
+		"op": {
+			Name:                "op",
+			RequiredPermissions: []string{"server.op"},
+			Arguments: []Argument{
+				{
+					Name: "player",
+					Parser: Parser{
+						ID:         6,
+						Name:       "minecraft:entity",
+						Properties: pk.Byte(0x02),
+					},
+				},
+			},
+		},
+		"reload": {
+			Name:                "reload",
+			RequiredPermissions: []string{"server.reload"},
+		},
+		"stop": {
+			Name:                "stop",
+			RequiredPermissions: []string{"server.stop"},
+		},
+	},
 }
 
 //go:embed registry

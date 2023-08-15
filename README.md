@@ -14,7 +14,11 @@ Feel free to contribute by making an issue or pull request
 - [x] Chat
 - [x] Permissions
 - [WIP] Chunk loading (buggy)
-- [WIP] Commands (barely)
+- [WIP] Commands
+    - [x] /op
+    - [x] /gamemode
+    - [x] /stop
+    - [x] /reload
 - [ ] Entities
 - [ ] Particles
 - [ ] Inventory

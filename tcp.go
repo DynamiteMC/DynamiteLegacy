@@ -277,10 +277,12 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.Float(50)))
 				var lastKeepAliveId int
 				player := Player{
-					Name:       fmt.Sprint(name),
-					UUID:       idString,
-					UUIDb:      id,
-					Connection: conn,
+					Name: fmt.Sprint(name),
+					UUID: UUID{
+						String: idString,
+						Binary: id,
+					},
+					Connection: &conn,
 					Properties: properties,
 					IP:         ip,
 				}
@@ -305,6 +307,7 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 							server.Players[idString] = player
+							server.PlayerNames[fmt.Sprint(name)] = idString
 							server.PlayerIDs = append(server.PlayerIDs, idString)
 							packet.Scan(&player.Client.Locale,
 								&player.Client.ViewDistance,

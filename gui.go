@@ -49,7 +49,7 @@ func LaunchGUI() fyne.Window {
 			cont := o.(*fyne.Container)
 			player := server.Players[server.PlayerIDs[i]]
 			if len(cont.Objects) == 0 {
-				res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID))
+				res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID.String))
 				skinData, _ := io.ReadAll(res.Body)
 				skin := widget.NewIcon(fyne.NewStaticResource("skin", skinData))
 				skin.Resize(fyne.NewSize(640, 640))

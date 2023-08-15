@@ -41,7 +41,7 @@ func OnPlayerJoin(params ...interface{}) {
 		pk.VarInt(0),
 		pk.VarInt(0),
 	))
-	connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{}))
+	connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{player.UUID.String}))
 
 	max := fmt.Sprint(server.Config.MaxPlayers)
 	if max == "-1" {
@@ -52,7 +52,7 @@ func OnPlayerJoin(params ...interface{}) {
 		playerContainer.Refresh()
 	}
 
-	group, prefix, suffix := server.GetGroup(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID.String)
 
 	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerJoin, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 	server.Playerlist.AddPlayer(player)
@@ -60,7 +60,8 @@ func OnPlayerJoin(params ...interface{}) {
 
 func OnPlayerLeave(params ...interface{}) {
 	player := params[0].(Player)
-	delete(server.Players, player.UUID)
+	delete(server.Players, player.UUID.String)
+	delete(server.PlayerNames, player.Name)
 
 	max := fmt.Sprint(server.Config.MaxPlayers)
 	if max == "-1" {
@@ -71,7 +72,7 @@ func OnPlayerLeave(params ...interface{}) {
 		playerContainer.Refresh()
 	}
 
-	group, prefix, suffix := server.GetGroup(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID.String)
 
 	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerLeave, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 	server.Playerlist.RemovePlayer(player)
@@ -82,15 +83,15 @@ func OnPlayerChatMessage(params ...interface{}) {
 		return
 	}
 	player := params[0].(Player)
-	if !server.HasPermissions(player.UUID, []string{"server.chat"}) {
+	if !server.HasPermissions(player.UUID.String, []string{"server.chat"}) {
 		return
 	}
 	content := params[1].(pk.String)
 
-	group, prefix, suffix := server.GetGroup(player.UUID)
+	group, prefix, suffix := server.GetGroup(player.UUID.String)
 
 	data := ParsePlaceholders(server.Config.Chat.Format, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, Message: fmt.Sprint(content), PlayerGroup: group})
-	if server.Config.Chat.Colors && server.HasPermissions(player.UUID, []string{"server.chat.colors"}) {
+	if server.Config.Chat.Colors && server.HasPermissions(player.UUID.String, []string{"server.chat.colors"}) {
 		data = strings.ReplaceAll(data, "&", "§")
 	}
 	server.BroadcastMessage(chat.Text(data))
@@ -99,6 +100,6 @@ func OnPlayerChatMessage(params ...interface{}) {
 func OnPlayerCommand(params ...interface{}) {
 	player := params[0].(Player)
 	command := params[1].(pk.String)
-	server.BroadcastMessageAdmin(player.UUID, chat.Text(fmt.Sprintf("Player %s (%s) executed command %s", player.Name, player.UUID, command)))
-	server.Message(player.UUID, server.Command(player.UUID, fmt.Sprint(command)))
+	server.BroadcastMessageAdmin(player.UUID.String, chat.Text(fmt.Sprintf("Player %s (%s) executed command %s", player.Name, player.UUID.String, command)))
+	server.Message(player.UUID.String, server.Command(player.UUID.String, fmt.Sprint(command)))
 }
