@@ -2,13 +2,15 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
 	pk "github.com/Tnze/go-mc/net/packet"
-	orderedmap "github.com/wk8/go-ordered-map/v2"
+	"github.com/Tnze/go-mc/offline"
+	"github.com/google/uuid"
 )
 
 func ReloadConfig() chat.Message {
@@ -47,41 +49,50 @@ func CreateSTDINReader() {
 	go CreateSTDINReader()
 }
 
-var Commands = orderedmap.New[string, Command](orderedmap.WithInitialData[string, Command](
-	orderedmap.Pair[string, Command]{
-		Key: "op",
-		Value: Command{
-			Name:                "op",
-			RequiredPermissions: []string{"server.op"},
-			Arguments: []Argument{
-				{
-					Name:            "player",
-					SuggestionsType: "minecraft:ask_server",
-					ParserID:        6,
+var Commands = map[string]Command{
+	"op": {
+		Name:                "op",
+		RequiredPermissions: []string{"server.op"},
+		Arguments: []Argument{
+			{
+				Name: "player",
+				Parser: Parser{
+					ID:         6,
+					Name:       "minecraft:entity",
+					Properties: pk.Byte(0x02),
 				},
 			},
 		},
 	},
-	orderedmap.Pair[string, Command]{
-		Key: "reload",
-		Value: Command{
-			Name:                "reload",
-			RequiredPermissions: []string{"server.reload"},
-			Aliases:             []string{"rl"},
-		},
+	"reload": {
+		Name:                "reload",
+		RequiredPermissions: []string{"server.reload"},
 	},
-	orderedmap.Pair[string, Command]{
-		Key: "stop",
-		Value: Command{
-			Name:                "stop",
-			RequiredPermissions: []string{"server.stop"},
-		},
+	"stop": {
+		Name:                "stop",
+		RequiredPermissions: []string{"server.stop"},
 	},
-))
+}
 
-func (server Server) Command(executor string, cmd string) chat.Message {
-	cmd = strings.TrimSpace(cmd)
-	command, exists := Commands.Get(cmd)
+func GetArgument(args []string, index int) string {
+	if len(args) < index {
+		return ""
+	}
+	return args[index]
+}
+
+func (server *Server) Command(executor string, content string) chat.Message {
+	var executorName string
+	if executor == "console" {
+		executorName = "Console"
+	} else {
+		executorName = server.Players[executor].Name
+	}
+	content = strings.TrimSpace(content)
+	args := strings.Split(content, " ")
+	cmd := args[0]
+	args = args[1:]
+	command, exists := Commands[cmd]
 	if !exists {
 		return chat.Text(server.Config.Messages.UnknownCommand)
 	}
@@ -101,6 +112,45 @@ func (server Server) Command(executor string, cmd string) chat.Message {
 				os.Exit(0)
 			}()
 			return chat.Text("Shutting down server...")
+		}
+	case "op":
+		{
+			id := GetArgument(args, 0)
+			if id == "" {
+				return chat.Text("§cPlease specify a player to op")
+			}
+			isOp, op := server.IsOP(id)
+			if isOp {
+				return chat.Text(fmt.Sprintf("§c%s is already a server operator", op.Name))
+			}
+			player := PlayerBase{}
+			if _, err := uuid.Parse(id); err == nil { // is uuid
+				exists, p := server.Mojang.FetchUUID(id)
+				if !exists {
+					if server.Config.Online {
+						return chat.Text("§cUnknown player")
+					}
+					player.Name = id
+				} else {
+					player.Name = p.Name
+				}
+				player.UUID = id
+			} else {
+				player.Name = id
+				exists, p := server.Mojang.FetchUsername(id)
+				if !exists {
+					if server.Config.Online {
+						return chat.Text("§cUnknown player")
+					} else {
+						player.UUID = fmt.Sprint(offline.NameToUUID(id))
+					}
+				} else {
+					player.UUID = p.UUID
+				}
+			}
+			server.OPs = WritePlayerList("ops.json", player)
+			server.BroadcastMessageAdmin(executor, chat.Text(fmt.Sprintf("§7[%s: Made %s a server operator]", executorName, player.Name)))
+			return chat.Text(fmt.Sprintf("Made %s a server operator", player.Name))
 		}
 	default:
 		return chat.Text(server.Config.Messages.UnknownCommand)

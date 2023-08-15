@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"math"
 
 	r "math/rand"
 	"time"
@@ -25,7 +26,6 @@ import (
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/offline"
 	"github.com/Tnze/go-mc/registry"
-	"github.com/Tnze/go-mc/save/region"
 	"github.com/Tnze/go-mc/server/auth"
 	"github.com/Tnze/go-mc/yggdrasil/user"
 )
@@ -288,6 +288,8 @@ func HandleTCPRequest(conn net.Conn) {
 					joined     = false
 					left       = false
 					lastPacket pk.Packet
+					lx         = -1
+					lz         = -1
 				)
 				for {
 					var packet pk.Packet
@@ -339,13 +341,10 @@ func HandleTCPRequest(conn net.Conn) {
 						}
 					case int32(packetid.ServerboundChatCommand):
 						{
-							var (
-								command   pk.String
-								timestamp pk.Long
-								arguments pk.ByteArray
-							)
-							packet.Scan(&command, &timestamp, &arguments)
-							server.Events.Emit("PlayerCommand", player, command, timestamp, arguments)
+							var command pk.String
+
+							packet.Scan(&command)
+							server.Events.Emit("PlayerCommand", player, command)
 						}
 					case int32(packetid.ServerboundChat):
 						{
@@ -378,10 +377,11 @@ func HandleTCPRequest(conn net.Conn) {
 								yPos = int(y)
 								zPos = int(z)
 							)
-
-							cx, cz := region.At(xPos, zPos)
+							chunkPos := level.ChunkPos([2]int32{int32(math.Floor(float64(xPos) / 16)), int32(math.Floor(float64(zPos) / 16))})
+							if chunkPos[0] == int32(lx) && chunkPos[1] == int32(lz) {
+								continue
+							}
 							server.Logger.Debug("[%s] Player %s (%s) moved (%d %d %d)", ip, name, idString, xPos, yPos, zPos)
-							chunkPos := level.ChunkPos([2]int32{int32(cx), int32(cz)})
 							chunk := server.GetChunk([2]int32{int32(xPos), int32(zPos)})
 							if chunk == nil {
 								continue
@@ -391,6 +391,8 @@ func HandleTCPRequest(conn net.Conn) {
 								chunkPos,
 								chunk,
 							))
+							lx = int(chunkPos[0])
+							lz = int(chunkPos[1])
 						}
 					case packetid.LoginDisconnect:
 						{

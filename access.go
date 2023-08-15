@@ -5,8 +5,13 @@ import (
 	"os"
 )
 
-func LoadPlayerList(path string) []Player {
-	list := []Player{}
+type PlayerBase struct {
+	UUID string `json:"id"`
+	Name string `json:"name"`
+}
+
+func LoadPlayerList(path string) []PlayerBase {
+	list := []PlayerBase{}
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -27,21 +32,20 @@ func LoadPlayerList(path string) []Player {
 	return list
 }
 
-func WritePlayerList(path string, player Player) {
-	list := []Player{}
+func WritePlayerList(path string, player PlayerBase) []PlayerBase {
+	list := []PlayerBase{}
 
-	file, err := os.Open(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
-		file.Close()
-		file, _ := os.Create(path)
-		e := json.NewEncoder(file)
-		e.Encode(&list)
+		list = append(list, player)
+		data, _ := json.Marshal(list)
+		os.WriteFile(path, data, 0755)
 	}
-	defer file.Close()
-	var data []Player
-	json.NewDecoder(file).Decode(&data)
-	data = append(data, player)
-	json.NewEncoder(file).Encode(&data)
+	json.Unmarshal(b, &list)
+	list = append(list, player)
+	data, _ := json.Marshal(list)
+	os.WriteFile(path, data, 0755)
+	return list
 }
 
 func LoadIPBans() []string {

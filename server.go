@@ -66,12 +66,18 @@ type ClientData struct {
 	Brand               pk.String
 }
 
+type Parser struct {
+	ID         int
+	Name       string
+	Properties pk.FieldEncoder
+}
+
 type Argument struct {
 	Name                string
 	Redirect            int
 	RequiredPermissions []string
 	SuggestionsType     string
-	ParserID            int
+	Parser              Parser
 	Optional            bool
 }
 
@@ -80,7 +86,6 @@ type Command struct {
 	Redirect            int
 	RequiredPermissions []string
 	Arguments           []Argument
-	Aliases             []string
 }
 
 type Player struct {
@@ -103,15 +108,16 @@ type Server struct {
 	Logger        Logger
 	Playerlist    Playerlist
 	StartTime     int64
-	Whitelist     []Player
-	OPs           []Player
-	BannedPlayers []Player
+	Whitelist     []PlayerBase
+	OPs           []PlayerBase
+	BannedPlayers []PlayerBase
 	BannedIPs     []string
 	Favicon       []byte
 	Level         save.Level
 	TCPListener   *mcnet.Listener
 	UDPListener   *net.UDPConn
 	EntityCounter int
+	Mojang        MojangAPI
 }
 
 type Node struct {
@@ -128,8 +134,7 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 	var rootChildren []int32
 	var nodes []Node
 	i := 1
-	for pair := Commands.Oldest(); pair != nil; pair = pair.Next() {
-		command := pair.Value
+	for _, command := range Commands {
 		nodes = append(nodes, Node{Parent: 0, Data: command})
 		for _, argument := range command.Arguments {
 			nodes = append(nodes, Node{Parent: i, Data: argument})
@@ -153,12 +158,9 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 			rootChildren = append(rootChildren, int32(index+1))
 		} else if isArgument {
 			flags := 0x02
-			//if index+1 == len(command.Arguments) || (len(command.Arguments) > i+1 && command.Arguments[i+1].Optional) {
-			//	flags |= 0x04
-			//}
-			/*if argument.SuggestionsType != "" {
+			if argument.SuggestionsType != "" {
 				flags |= 0x10
-			}*/
+			}
 			parent := nodes[node.Parent-1]
 			parent.Children = append(parent.Children, len(entries))
 			entries[parent.EntryIndex] = pk.Tuple{
@@ -170,29 +172,18 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 				pk.Byte(flags),
 				pk.Array((*[]pk.VarInt)(unsafe.Pointer(&[]int32{}))),
 				pk.String(argument.Name),
-				pk.VarInt(argument.ParserID),
-				/*pk.Opt{
+				pk.VarInt(argument.Parser.ID),
+				argument.Parser.Properties,
+				pk.Opt{
 					Has:   func() bool { return argument.SuggestionsType != "" },
 					Field: pk.String(argument.SuggestionsType),
-				},*/
+				},
 			})
 		}
 	}
 	entries[0] = pk.Tuple{
 		pk.Byte(0x0),
 		pk.Array((*[]pk.VarInt)(unsafe.Pointer(&rootChildren))),
-	}
-	for index, entry := range entries {
-		var buff bytes.Buffer
-		entry.WriteTo(&buff)
-		packet := pk.Packet{ID: 0, Data: buff.Bytes()}
-		var (
-			f pk.Byte
-			c pk.ByteArray
-			n pk.String
-		)
-		packet.Scan(&f, &c, &n)
-		fmt.Printf("Index %d | Flags %d | Children %v | %s\n", index, f, c, n)
 	}
 	return pk.Tuple{
 		pk.Array(entries),
@@ -213,6 +204,14 @@ func (emitter Events) RemoveListener(key string, index int) {
 
 func (emitter Events) RemoveAllListeners(key string) {
 	delete(emitter._Events, key)
+}
+func (server Server) IsOP(id string) (bool, PlayerBase) {
+	for _, op := range server.OPs {
+		if op.UUID == id || op.Name == id {
+			return true, op
+		}
+	}
+	return false, PlayerBase{}
 }
 
 func (emitter Events) Emit(key string, data ...interface{}) {
@@ -388,7 +387,10 @@ func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message
 	op := LoadPlayerList("ops.json")
 	ops := make(map[string]Player)
 	for i := 0; i < len(op); i++ {
-		ops[op[i].UUID] = op[i]
+		ops[op[i].UUID] = Player{
+			Name: op[i].Name,
+			UUID: op[i].UUID,
+		}
 	}
 	for _, player := range server.Players {
 		if ops[player.UUID].UUID == player.UUID && player.UUID != playerId {
@@ -455,5 +457,6 @@ func ParsePlaceholders(str string, placeholders Placeholders) string {
 	str = strings.ReplaceAll(str, "%player_prefix%", placeholders.PlayerPrefix)
 	str = strings.ReplaceAll(str, "%player_suffix%", placeholders.PlayerSuffix)
 	str = strings.ReplaceAll(str, "%player_group%", placeholders.PlayerGroup)
+	str = strings.TrimSpace(str)
 	return str
 }
