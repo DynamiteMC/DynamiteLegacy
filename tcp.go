@@ -385,7 +385,7 @@ func HandleTCPRequest(conn net.Conn) {
 								continue
 							}
 							server.Logger.Debug("[%s] Player %s (%s) moved (%d %d %d)", ip, name, idString, xPos, yPos, zPos)
-							chunk := server.GetChunk([2]int32{int32(xPos), int32(zPos)})
+							chunk := server.GetChunk([2]int32{int32(xPos), int32(zPos)}, Protocol < PROTOCOL_1_20)
 							if chunk == nil {
 								continue
 							}

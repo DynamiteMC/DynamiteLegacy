@@ -29,4 +29,8 @@ Feel free to contribute by making an issue or pull request
 - [WIP] Plugins
 
 ## Tested Versions
+1.20.1 (763)
+
+1.20 (763)
+
 1.19.4 (762)
