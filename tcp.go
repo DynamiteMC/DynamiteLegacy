@@ -144,18 +144,18 @@ func HandleTCPRequest(conn net.Conn) {
 		}
 
 		switch Intention {
-		case 1: // Ping
-			{
-				handleTCPPing(conn, Protocol, ip)
-			}
+		case packetid.StatusPingRequest:
+			handleTCPPing(conn, Protocol, ip) // Ping
 		case 2:
 			{ // login
 				if server.Config.TCP.MinProtocol != 0 && server.Config.TCP.MinProtocol > int(Protocol) {
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolOld)))
+					conn.Close()
 					return
 				}
 				if server.Config.TCP.MaxProtocol != 0 && server.Config.TCP.MaxProtocol < int(Protocol) {
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolNew)))
+					conn.Close()
 					return
 				}
 				var p pk.Packet
