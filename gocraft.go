@@ -10,6 +10,11 @@ import (
 	pk "github.com/Tnze/go-mc/net/packet"
 )
 
+/*
+	GoCraft 1.19.4
+	Made by @oq_x 2023
+*/
+
 var server = Server{
 	Config:      LoadConfig(),
 	Players:     make(map[string]Player),
@@ -63,7 +68,7 @@ var server = Server{
 	},
 }
 
-//go:embed registry
+//go:embed registry.nbt
 var registries embed.FS
 
 func main() {
@@ -81,13 +86,11 @@ func main() {
 	if HasArg("-gui") {
 		go func() {
 			for {
-				if server.Config.TCP.Enable {
-					conn, err := server.TCPListener.Accept()
-					if err != nil {
-						continue
-					}
-					go HandleTCPRequest(conn)
+				conn, err := server.TCPListener.Accept()
+				if err != nil {
+					continue
 				}
+				go HandleTCPRequest(conn)
 			}
 		}()
 		server.Logger.Info("Launching GUI panel")
@@ -96,22 +99,11 @@ func main() {
 	} else {
 		server.Logger.Info("Done! (%d)", time.Now().Unix()-server.StartTime)
 		for {
-			if server.Config.TCP.Enable {
-				conn, err := server.TCPListener.Accept()
-				if err != nil {
-					continue
-				}
-				go HandleTCPRequest(conn)
-			}
-			if server.Config.UDP.Enable {
-				buffer := make([]byte, 1024)
-				_, ip, err := server.UDPListener.ReadFromUDP(buffer)
-				if err != nil {
-					continue
-				}
-				go HandleUDPRequest(server.UDPListener, ip.String(), buffer)
+			conn, err := server.TCPListener.Accept()
+			if err != nil {
 				continue
 			}
+			go HandleTCPRequest(conn)
 		}
 	}
 }

@@ -78,18 +78,8 @@ const (
 )
 
 func getNetworkRegistry(protocol pk.VarInt) (reg registry.NetworkCodec) {
-	switch protocol {
-	case 763:
-		{
-			data, _ := registries.ReadFile("registry/1.20.nbt")
-			nbt.Unmarshal(data, &reg)
-		}
-	case 762:
-		{
-			data, _ := os.ReadFile("registry/1.19.4.nbt")
-			nbt.Unmarshal(data, &reg)
-		}
-	}
+	data, _ := registries.ReadFile("registry.nbt")
+	nbt.Unmarshal(data, &reg)
 	return
 }
 
@@ -115,13 +105,13 @@ func (d *MojangLoginHandler) getPrivateKey() (key *rsa.PrivateKey, err error) {
 
 func TCPListen() {
 	var err error
-	server.TCPListener, err = net.ListenMC(server.Config.TCP.ServerIP + ":" + fmt.Sprint(server.Config.TCP.ServerPort))
+	server.TCPListener, err = net.ListenMC(server.Config.ServerIP + ":" + fmt.Sprint(server.Config.ServerPort))
 	if err != nil {
 		server.Logger.Error("[TCP] Failed to listen: %s", err.Error())
 		os.Exit(1)
 	}
 
-	server.Logger.Info("[TCP] Listening on %s:%d", server.Config.TCP.ServerIP, server.Config.TCP.ServerPort)
+	server.Logger.Info("[TCP] Listening on %s:%d", server.Config.ServerIP, server.Config.ServerPort)
 }
 
 func HandleTCPRequest(conn net.Conn) {
@@ -146,12 +136,12 @@ func HandleTCPRequest(conn net.Conn) {
 			handleTCPPing(conn, Protocol, ip) // Ping
 		case 2:
 			{ // login
-				if server.Config.TCP.MinProtocol != 0 && server.Config.TCP.MinProtocol > int(Protocol) {
+				if 762 > int(Protocol) {
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolOld)))
 					conn.Close()
 					return
 				}
-				if server.Config.TCP.MaxProtocol != 0 && server.Config.TCP.MaxProtocol < int(Protocol) {
+				if 762 < int(Protocol) {
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolNew)))
 					conn.Close()
 					return
@@ -218,16 +208,10 @@ func HandleTCPRequest(conn net.Conn) {
 					server.Logger.Info("[%s] Player %s (%s) attempt failed. reason: %s", ip, name, idString, reason)
 					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, r))
 				}
-				loginSuccessFields := []pk.FieldEncoder{
-					id,
-					pk.String(name),
-				}
-				if Protocol >= PROTOCOL_1_19 {
-					loginSuccessFields = append(loginSuccessFields, pk.Array(properties))
-				}
 				conn.WritePacket(pk.Marshal(
 					packetid.LoginSuccess,
-					loginSuccessFields...,
+					id,
+					pk.String(name),
 				))
 				gamemode := 0
 				if server.Config.Gamemode == "creative" {
@@ -240,7 +224,8 @@ func HandleTCPRequest(conn net.Conn) {
 					gamemode = 3
 				}
 				hashedSeed := [8]byte{}
-				fields := []pk.FieldEncoder{
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLogin,
 					pk.Int(server.NewEntityID()),
 					pk.Boolean(server.Config.Hardcore),
 					pk.UnsignedByte(gamemode),
@@ -260,16 +245,7 @@ func HandleTCPRequest(conn net.Conn) {
 					pk.Boolean(false),                   // Is Debug
 					pk.Boolean(false),                   // Is Flat
 					pk.Boolean(false),                   // Has Last Death Location
-				}
-				if Protocol >= PROTOCOL_1_20 {
-					fields = append(fields, pk.VarInt(3))
-				}
-				if Protocol >= PROTOCOL_1_19 {
-					conn.WritePacket(pk.Marshal(
-						packetid.ClientboundLogin,
-						fields...,
-					))
-				}
+				))
 				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 					pk.Position{X: 0, Y: 0, Z: 0},
 					pk.Float(50)))
@@ -391,16 +367,10 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			for _, player := range server.Players {
 				players = append(players, player)
 			}
-			protocol := Protocol
-			if server.Config.TCP.MaxProtocol < int(protocol) {
-				protocol = pk.VarInt(server.Config.TCP.MaxProtocol)
-			} else if server.Config.TCP.MinProtocol > int(protocol) {
-				protocol = pk.VarInt(server.Config.TCP.MinProtocol)
-			}
 			response := StatusResponse{
 				Version: Version{
-					Name:     "GoCraft",
-					Protocol: int(protocol),
+					Name:     "GoCraft 1.19.4",
+					Protocol: 762,
 				},
 				Players: Players{
 					Max:    max,
