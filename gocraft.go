@@ -89,10 +89,10 @@ func main() {
 			}
 		}()
 		server.Logger.Info("Launching GUI panel")
-		server.Logger.Info("Done! (%d)", time.Now().Unix()-server.StartTime)
+		server.Logger.Info("Done! (%ds)", time.Now().Unix()-server.StartTime)
 		LaunchGUI().ShowAndRun()
 	} else {
-		server.Logger.Info("Done! (%d)", time.Now().Unix()-server.StartTime)
+		server.Logger.Info("Done! (%ds)", time.Now().Unix()-server.StartTime)
 		for {
 			conn, err := server.TCPListener.Accept()
 			if err != nil {
