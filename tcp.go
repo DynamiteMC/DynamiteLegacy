@@ -119,250 +119,247 @@ func HandleTCPRequest(conn net.Conn) {
 	var packet pk.Packet
 	conn.ReadPacket(&packet)
 	ip := conn.Socket.RemoteAddr().String()
-	if packet.ID == 0x00 { // 1.7+
-		server.Logger.Debug("[TCP] ([%s] -> Server) Sent handshake", ip)
-		var (
-			Protocol, Intention pk.VarInt
-			ServerAddress       pk.String
-			ServerPort          pk.UnsignedShort
-		)
-		err := packet.Scan(&Protocol, &ServerAddress, &ServerPort, &Intention)
-		if err != nil {
-			return
-		}
+	server.Logger.Debug("[TCP] ([%s] -> Server) Sent handshake", ip)
+	var (
+		Protocol, Intention pk.VarInt
+		ServerAddress       pk.String
+		ServerPort          pk.UnsignedShort
+	)
+	err := packet.Scan(&Protocol, &ServerAddress, &ServerPort, &Intention)
+	if err != nil {
+		return
+	}
 
-		switch Intention {
-		case packetid.StatusPingRequest:
-			handleTCPPing(conn, Protocol, ip) // Ping
-		case 2:
-			{ // login
-				if 762 > int(Protocol) {
-					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolOld)))
-					conn.Close()
+	switch Intention {
+	case packetid.StatusPingRequest:
+		handleTCPPing(conn, Protocol, ip) // Ping
+	case 2:
+		{ // login
+			if 762 > int(Protocol) {
+				conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolOld)))
+				conn.Close()
+				return
+			}
+			if 762 < int(Protocol) {
+				conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolNew)))
+				conn.Close()
+				return
+			}
+			var p pk.Packet
+			conn.ReadPacket(&p)
+			var (
+				name pk.String
+				uuid pk.UUID
+			)
+			p.Scan(&name, &uuid)
+			server.Logger.Debug("[TCP] ([%s] -> Server) Sent LoginStart packet. Username: %s", ip, name)
+			var id pk.UUID
+			var idString string
+			properties := []user.Property{}
+			if server.Config.Online {
+				d := MojangLoginHandler{}
+				var serverKey *rsa.PrivateKey
+				serverKey, err = d.getPrivateKey()
+				if err != nil {
 					return
 				}
-				if 762 < int(Protocol) {
-					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolNew)))
-					conn.Close()
+				var resp *auth.Resp
+				resp, err = auth.Encrypt(&conn, fmt.Sprint(name), serverKey)
+				if err != nil {
 					return
 				}
-				var p pk.Packet
-				conn.ReadPacket(&p)
-				var (
-					name pk.String
-					uuid pk.UUID
-				)
-				p.Scan(&name, &uuid)
-				server.Logger.Debug("[TCP] ([%s] -> Server) Sent LoginStart packet. Username: %s", ip, name)
-				var id pk.UUID
-				var idString string
-				properties := []user.Property{}
-				if server.Config.Online {
-					d := MojangLoginHandler{}
-					var serverKey *rsa.PrivateKey
-					serverKey, err = d.getPrivateKey()
-					if err != nil {
-						return
+				name = pk.String(resp.Name)
+				idString = fmt.Sprint(resp.ID)
+				id = pk.UUID(resp.ID)
+				properties = resp.Properties
+			} else {
+				id = pk.UUID(offline.NameToUUID(string(name)))
+				idString = fmt.Sprint(offline.NameToUUID(string(name)))
+			}
+			server.Logger.Info("[%s] Player %s (%s) is attempting to join", ip, name, idString)
+			valid := ValidatePlayer(fmt.Sprint(name), idString, strings.Split(ip, ":")[0])
+			if valid != 0 {
+				var reason string
+				var reasonNice string
+				switch valid {
+				case 1:
+					{
+						reason = "player not in whitelist"
+						reasonNice = server.Config.Messages.NotInWhitelist
 					}
-					var resp *auth.Resp
-					resp, err = auth.Encrypt(&conn, fmt.Sprint(name), serverKey)
-					if err != nil {
-						return
+				case 2:
+					{
+						reason = "player is banned"
+						reasonNice = server.Config.Messages.Banned
 					}
-					name = pk.String(resp.Name)
-					idString = fmt.Sprint(resp.ID)
-					id = pk.UUID(resp.ID)
-					properties = resp.Properties
-				} else {
-					id = pk.UUID(offline.NameToUUID(string(name)))
-					idString = fmt.Sprint(offline.NameToUUID(string(name)))
-				}
-				server.Logger.Info("[%s] Player %s (%s) is attempting to join", ip, name, idString)
-				valid := ValidatePlayer(fmt.Sprint(name), idString, strings.Split(ip, ":")[0])
-				if valid != 0 {
-					var reason string
-					var reasonNice string
-					switch valid {
-					case 1:
-						{
-							reason = "player not in whitelist"
-							reasonNice = server.Config.Messages.NotInWhitelist
-						}
-					case 2:
-						{
-							reason = "player is banned"
-							reasonNice = server.Config.Messages.Banned
-						}
-					case 3:
-						{
-							reason = "server is full"
-							reasonNice = server.Config.Messages.ServerFull
-						}
-					case 4:
-						{
-							reason = "already playing"
-							reasonNice = server.Config.Messages.AlreadyPlaying
-						}
+				case 3:
+					{
+						reason = "server is full"
+						reasonNice = server.Config.Messages.ServerFull
 					}
-					r := chat.Text(reasonNice)
-					server.Logger.Info("[%s] Player %s (%s) attempt failed. reason: %s", ip, name, idString, reason)
-					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, r))
+				case 4:
+					{
+						reason = "already playing"
+						reasonNice = server.Config.Messages.AlreadyPlaying
+					}
 				}
-				loginSuccessFields := []pk.FieldEncoder{
-					id,
-					pk.String(name),
-				}
-				if Protocol >= PROTOCOL_1_19 {
-					loginSuccessFields = append(loginSuccessFields, pk.Array(properties))
-				}
-				conn.WritePacket(pk.Marshal(
-					packetid.LoginSuccess,
-					loginSuccessFields...,
-				))
-				gamemode := 0
-				if server.Config.Gamemode == "creative" {
-					gamemode = 1
-				}
-				if server.Config.Gamemode == "adventure" {
-					gamemode = 2
-				}
-				if server.Config.Gamemode == "spectator" {
-					gamemode = 3
-				}
-				hashedSeed := [8]byte{}
-				fields := []pk.FieldEncoder{
-					pk.Int(server.NewEntityID()),
-					pk.Boolean(server.Config.Hardcore),
-					pk.UnsignedByte(gamemode),
-					pk.Byte(-1),
-					pk.Array([]pk.Identifier{
-						pk.Identifier("world"),
-					}),
-					pk.NBT(getNetworkRegistry(Protocol)),
-					pk.Identifier("minecraft:overworld"),
+				r := chat.Text(reasonNice)
+				server.Logger.Info("[%s] Player %s (%s) attempt failed. reason: %s", ip, name, idString, reason)
+				conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, r))
+			}
+			loginSuccessFields := []pk.FieldEncoder{
+				id,
+				pk.String(name),
+			}
+			if Protocol >= PROTOCOL_1_19 {
+				loginSuccessFields = append(loginSuccessFields, pk.Array(properties))
+			}
+			conn.WritePacket(pk.Marshal(
+				packetid.LoginSuccess,
+				loginSuccessFields...,
+			))
+			gamemode := 0
+			if server.Config.Gamemode == "creative" {
+				gamemode = 1
+			}
+			if server.Config.Gamemode == "adventure" {
+				gamemode = 2
+			}
+			if server.Config.Gamemode == "spectator" {
+				gamemode = 3
+			}
+			hashedSeed := [8]byte{}
+			fields := []pk.FieldEncoder{
+				pk.Int(server.NewEntityID()),
+				pk.Boolean(server.Config.Hardcore),
+				pk.UnsignedByte(gamemode),
+				pk.Byte(-1),
+				pk.Array([]pk.Identifier{
 					pk.Identifier("world"),
-					pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
-					pk.VarInt(server.Config.MaxPlayers), // Max players (ignored by client)
-					pk.VarInt(12),                       // View Distance
-					pk.VarInt(12),                       // Simulation Distance
-					pk.Boolean(false),                   // Reduced Debug Info
-					pk.Boolean(false),                   // Enable respawn screen
-					pk.Boolean(false),                   // Is Debug
-					pk.Boolean(false),                   // Is Flat
-					pk.Boolean(false),                   // Has Last Death Location
+				}),
+				pk.NBT(getNetworkRegistry(Protocol)),
+				pk.Identifier("minecraft:overworld"),
+				pk.Identifier("world"),
+				pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
+				pk.VarInt(server.Config.MaxPlayers), // Max players (ignored by client)
+				pk.VarInt(12),                       // View Distance
+				pk.VarInt(12),                       // Simulation Distance
+				pk.Boolean(false),                   // Reduced Debug Info
+				pk.Boolean(false),                   // Enable respawn screen
+				pk.Boolean(false),                   // Is Debug
+				pk.Boolean(false),                   // Is Flat
+				pk.Boolean(false),                   // Has Last Death Location
+			}
+			if Protocol >= PROTOCOL_1_20 {
+				fields = append(fields, pk.VarInt(3))
+			}
+			if Protocol >= PROTOCOL_1_19 {
+				conn.WritePacket(pk.Marshal(
+					packetid.ClientboundLogin,
+					fields...,
+				))
+			}
+			conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
+				pk.Position{X: 0, Y: 0, Z: 0},
+				pk.Float(50)))
+			var lastKeepAliveId int
+			player := Player{
+				Name: fmt.Sprint(name),
+				UUID: UUID{
+					String: idString,
+					Binary: id,
+				},
+				Connection: &conn,
+				Properties: properties,
+				IP:         ip,
+			}
+			for {
+				var packet pk.Packet
+				err := conn.ReadPacket(&packet)
+				if err != nil {
+					server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
+					server.Events.Emit("PlayerLeave", player)
+					return
 				}
-				if Protocol >= PROTOCOL_1_20 {
-					fields = append(fields, pk.VarInt(3))
-				}
-				if Protocol >= PROTOCOL_1_19 {
-					conn.WritePacket(pk.Marshal(
-						packetid.ClientboundLogin,
-						fields...,
-					))
-				}
-				conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
-					pk.Position{X: 0, Y: 0, Z: 0},
-					pk.Float(50)))
-				var lastKeepAliveId int
-				player := Player{
-					Name: fmt.Sprint(name),
-					UUID: UUID{
-						String: idString,
-						Binary: id,
-					},
-					Connection: &conn,
-					Properties: properties,
-					IP:         ip,
-				}
-				for {
-					var packet pk.Packet
-					err := conn.ReadPacket(&packet)
-					if err != nil {
-						server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
-						server.Events.Emit("PlayerLeave", player)
-						return
+				switch packet.ID {
+				case int32(packetid.ServerboundClientInformation):
+					{
+						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
+						server.Players[idString] = player
+						server.PlayerNames[fmt.Sprint(name)] = idString
+						server.PlayerIDs = append(server.PlayerIDs, idString)
+						packet.Scan(&player.Client.Locale,
+							&player.Client.ViewDistance,
+							&player.Client.ChatMode,
+							&player.Client.ChatColors,
+							&player.Client.DisplayedSkinParts,
+							&player.Client.MainHand,
+							&player.Client.EnableTextFiltering,
+							&player.Client.AllowServerListings,
+						)
+						server.Players[idString] = player
+						server.Events.Emit("PlayerJoin", player, conn)
+						ticker := time.NewTicker(10 * time.Second)
+						defer ticker.Stop()
+						go func() {
+							for range ticker.C {
+								lastKeepAliveId = r.Intn(1000)
+								conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
+								server.Logger.Debug("[TCP] (Server -> [%s]) Sent KeepAlive packet", ip)
+							}
+						}()
 					}
-					switch packet.ID {
-					case int32(packetid.ServerboundClientInformation):
-						{
-							server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
-							server.Players[idString] = player
-							server.PlayerNames[fmt.Sprint(name)] = idString
-							server.PlayerIDs = append(server.PlayerIDs, idString)
-							packet.Scan(&player.Client.Locale,
-								&player.Client.ViewDistance,
-								&player.Client.ChatMode,
-								&player.Client.ChatColors,
-								&player.Client.DisplayedSkinParts,
-								&player.Client.MainHand,
-								&player.Client.EnableTextFiltering,
-								&player.Client.AllowServerListings,
-							)
-							server.Players[idString] = player
-							server.Events.Emit("PlayerJoin", player, conn)
-							ticker := time.NewTicker(10 * time.Second)
-							defer ticker.Stop()
-							go func() {
-								for range ticker.C {
-									lastKeepAliveId = r.Intn(1000)
-									conn.WritePacket(pk.Marshal(packetid.ClientboundKeepAlive, pk.Long(lastKeepAliveId)))
-									server.Logger.Debug("[TCP] (Server -> [%s]) Sent KeepAlive packet", ip)
-								}
-							}()
+				case int32(packetid.ServerboundKeepAlive):
+					{
+						var id pk.Long
+						packet.Scan(&id)
+						if id != pk.Long(lastKeepAliveId) {
+							conn.Close()
+							server.Events.Emit("PlayerLeave", player)
+							break
 						}
-					case int32(packetid.ServerboundKeepAlive):
-						{
-							var id pk.Long
-							packet.Scan(&id)
-							if id != pk.Long(lastKeepAliveId) {
-								conn.Close()
-								server.Events.Emit("PlayerLeave", player)
-								break
-							}
-							server.Logger.Debug("[TCP] ([%s] -> Server) Sent KeepAlive packet", ip)
-						}
-					case int32(packetid.ServerboundChatCommand):
-						{
-							var command pk.String
+						server.Logger.Debug("[TCP] ([%s] -> Server) Sent KeepAlive packet", ip)
+					}
+				case int32(packetid.ServerboundChatCommand):
+					{
+						var command pk.String
 
-							packet.Scan(&command)
-							server.Events.Emit("PlayerCommand", player, command)
+						packet.Scan(&command)
+						server.Events.Emit("PlayerCommand", player, command)
+					}
+				case int32(packetid.ServerboundChat):
+					{
+						var content pk.String
+						packet.Scan(&content)
+						server.Events.Emit("PlayerChatMessage", player, content)
+					}
+				case 0x0D:
+					{
+						var (
+							channel pk.Identifier
+							data    pk.String
+						)
+						packet.Scan(&channel, &data)
+						if channel == "minecraft:brand" {
+							player.Client.Brand = data
 						}
-					case int32(packetid.ServerboundChat):
-						{
-							var content pk.String
-							packet.Scan(&content)
-							server.Events.Emit("PlayerChatMessage", player, content)
-						}
-					case 0x0D:
-						{
-							var (
-								channel pk.Identifier
-								data    pk.String
-							)
-							packet.Scan(&channel, &data)
-							if channel == "minecraft:brand" {
-								player.Client.Brand = data
-							}
-							server.Players[idString] = player
-						}
-					case packetid.LoginDisconnect:
-						{
-							var reason pk.VarInt
-							packet.Scan(&reason)
-							fmt.Println(reason)
-							if reason == 0 {
-								server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
-								conn.Close()
-								server.Events.Emit("PlayerLeave", player)
-								return
-							}
+						server.Players[idString] = player
+					}
+				case packetid.LoginDisconnect:
+					{
+						var reason pk.VarInt
+						packet.Scan(&reason)
+						fmt.Println(reason)
+						if reason == 0 {
+							server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
+							conn.Close()
+							server.Events.Emit("PlayerLeave", player)
+							return
 						}
 					}
 				}
 			}
 		}
-	} else if packet.ID == 122 { //1.6-
 	}
 }
 

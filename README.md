@@ -27,3 +27,6 @@ Feel free to contribute by making an issue or pull request
 - [ ] Crafting
 - [ ] Placing blocks 
 - [WIP] Plugins
+
+## Credits 
+@Tnze for making go-mc
