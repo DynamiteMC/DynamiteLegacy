@@ -34,3 +34,6 @@ Feel free to contribute by making an issue or pull request
 1.20 (763)
 
 1.19.4 (762)
+
+## Credits 
+@Tnze for making go-mc
