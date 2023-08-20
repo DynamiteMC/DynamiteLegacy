@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
-	"math"
 
 	r "math/rand"
 	"time"
@@ -20,7 +19,6 @@ import (
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
-	"github.com/Tnze/go-mc/level"
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
@@ -286,25 +284,17 @@ func HandleTCPRequest(conn net.Conn) {
 					Properties: properties,
 					IP:         ip,
 				}
-				var (
-					joined     = false
-					left       = false
-					lastPacket pk.Packet
-					lx         = -1
-					lz         = -1
-				)
 				for {
 					var packet pk.Packet
-					conn.ReadPacket(&packet)
-					if len(packet.Data) == len(lastPacket.Data) {
-						continue
+					err := conn.ReadPacket(&packet)
+					if err != nil {
+						server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
+						server.Events.Emit("PlayerLeave", player)
+						return
 					}
 					switch packet.ID {
 					case int32(packetid.ServerboundClientInformation):
 						{
-							if joined {
-								continue
-							}
 							server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 							server.Players[idString] = player
 							server.PlayerNames[fmt.Sprint(name)] = idString
@@ -322,7 +312,6 @@ func HandleTCPRequest(conn net.Conn) {
 							server.Events.Emit("PlayerJoin", player, conn)
 							ticker := time.NewTicker(10 * time.Second)
 							defer ticker.Stop()
-							joined = true
 							go func() {
 								for range ticker.C {
 									lastKeepAliveId = r.Intn(1000)
@@ -367,48 +356,19 @@ func HandleTCPRequest(conn net.Conn) {
 							}
 							server.Players[idString] = player
 						}
-					case int32(packetid.ServerboundMovePlayerPos), int32(packetid.ServerboundMovePlayerPosRot):
-						{
-							var (
-								x pk.Double
-								y pk.Double
-								z pk.Double
-							)
-							packet.Scan(&x, &y, &z)
-							var (
-								xPos = int(x)
-								yPos = int(y)
-								zPos = int(z)
-							)
-							chunkPos := level.ChunkPos([2]int32{int32(math.Floor(float64(xPos) / 16)), int32(math.Floor(float64(zPos) / 16))})
-							if chunkPos[0] == int32(lx) && chunkPos[1] == int32(lz) {
-								continue
-							}
-							server.Logger.Debug("[%s] Player %s (%s) moved (%d %d %d)", ip, name, idString, xPos, yPos, zPos)
-							chunk := server.GetChunk([2]int32{int32(xPos), int32(zPos)}, Protocol < PROTOCOL_1_20)
-							if chunk == nil {
-								continue
-							}
-							conn.WritePacket(pk.Marshal(
-								packetid.ClientboundLevelChunkWithLight,
-								chunkPos,
-								chunk,
-							))
-							lx = int(chunkPos[0])
-							lz = int(chunkPos[1])
-						}
 					case packetid.LoginDisconnect:
 						{
-							server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
-							conn.Close()
-							if joined && !left {
+							var reason pk.VarInt
+							packet.Scan(&reason)
+							fmt.Println(reason)
+							if reason == 0 {
+								server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
+								conn.Close()
 								server.Events.Emit("PlayerLeave", player)
+								return
 							}
-							left = true
-							return
 						}
 					}
-					lastPacket = packet
 				}
 			}
 		}

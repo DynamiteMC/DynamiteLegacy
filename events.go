@@ -36,11 +36,6 @@ func OnPlayerJoin(params ...interface{}) {
 	}
 	fields = append(fields, pk.Boolean(true))
 	connection.WritePacket(pk.Marshal(packetid.ClientboundServerData, fields...))
-	connection.WritePacket(pk.Marshal(
-		packetid.ClientboundSetChunkCacheCenter,
-		pk.VarInt(0),
-		pk.VarInt(0),
-	))
 	connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{player.UUID.String}))
 
 	max := fmt.Sprint(server.Config.MaxPlayers)
