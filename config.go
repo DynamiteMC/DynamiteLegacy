@@ -6,6 +6,20 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type TCP struct {
+	ServerIP    string `yaml:"server_ip"`
+	ServerPort  int    `yaml:"server_port"`
+	Enable      bool   `yaml:"enable"`
+	MinProtocol int    `yaml:"min_protocol"`
+	MaxProtocol int    `yaml:"max_protocol"`
+}
+
+type UDP struct {
+	ServerIP   string `yaml:"server_ip"`
+	ServerPort int    `yaml:"server_port"`
+	Enable     bool   `yaml:"enable"`
+}
+
 type Tablist struct {
 	Header []string `yaml:"header"`
 	Footer []string `yaml:"footer"`
@@ -44,8 +58,8 @@ type Whitelist struct {
 
 type Config struct {
 	ServerName string    `yaml:"server_name"`
-	ServerIP   string    `yaml:"server_ip"`
-	ServerPort int       `yaml:"server_port"`
+	TCP        TCP       `yaml:"java"`
+	UDP        UDP       `yaml:"bedrock"`
 	MOTD       string    `yaml:"motd"`
 	Icon       Icon      `yaml:"icon"`
 	Whitelist  Whitelist `yaml:"whitelist"`
@@ -66,9 +80,19 @@ func LoadConfig() *Config {
 		file.Close()
 		config = &Config{
 			ServerName: "GoCraft",
-			ServerIP:   "0.0.0.0",
-			ServerPort: 25565,
-			MOTD:       "A GoCraft Minecraft Server",
+			TCP: TCP{
+				ServerIP:    "0.0.0.0",
+				ServerPort:  25565,
+				Enable:      true,
+				MinProtocol: 757,
+				MaxProtocol: 763,
+			},
+			UDP: UDP{
+				ServerIP:   "0.0.0.0",
+				ServerPort: 19132,
+				Enable:     false,
+			},
+			MOTD: "A GoCraft Minecraft Server",
 			Whitelist: Whitelist{
 				Enforce: false,
 				Enable:  false,

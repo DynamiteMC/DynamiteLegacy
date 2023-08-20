@@ -19,7 +19,6 @@ import (
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
-	"github.com/Tnze/go-mc/level"
 	"github.com/Tnze/go-mc/nbt"
 	mcnet "github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
@@ -295,7 +294,7 @@ func (server *Server) NewEntityID() int {
 	return server.EntityCounter
 }
 
-func (server Server) GetChunk(pos [2]int32, addEdges bool) *level.Chunk {
+func (server Server) GetChunk(pos [2]int32, addEdges bool) *Chunk {
 	rx, rz := region.At(int(pos[0]), int(pos[1]))
 	filename := fmt.Sprintf("world/region/r.%d.%d.mca", rx, rz)
 	r, err := region.Open(filename)
@@ -316,7 +315,7 @@ func (server Server) GetChunk(pos [2]int32, addEdges bool) *level.Chunk {
 		return nil
 	}
 	r.Close()
-	chunk, err := level.ChunkFromSave(&c)
+	chunk, err := ChunkFromSave(&c, addEdges)
 	if err != nil {
 		return nil
 	}
@@ -337,7 +336,12 @@ func (server *Server) Init() {
 		server.Logger.Warn("Offline mode is insecure. You can disable this message using -no_offline_warn")
 	}
 	server.ParseWorldData()
-	TCPListen()
+	if server.Config.TCP.Enable {
+		TCPListen()
+	}
+	if server.Config.UDP.Enable {
+		UDPListen()
+	}
 	CreateEvents()
 }
 
