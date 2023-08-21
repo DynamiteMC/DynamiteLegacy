@@ -207,16 +207,11 @@ func HandleTCPRequest(conn net.Conn) {
 				server.Logger.Info("[%s] Player %s (%s) attempt failed. reason: %s", ip, name, idString, reason)
 				conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, r))
 			}
-			loginSuccessFields := []pk.FieldEncoder{
-				id,
-				pk.String(name),
-			}
-			if Protocol >= PROTOCOL_1_19 {
-				loginSuccessFields = append(loginSuccessFields, pk.Array(properties))
-			}
 			conn.WritePacket(pk.Marshal(
 				packetid.LoginSuccess,
-				loginSuccessFields...,
+				id,
+				pk.String(name),
+				pk.Array(properties),
 			))
 			gamemode := 0
 			if server.Config.Gamemode == "creative" {
@@ -244,18 +239,18 @@ func HandleTCPRequest(conn net.Conn) {
 				pk.Identifier("minecraft:overworld"),
 				pk.Identifier(dimensions[0]),
 				pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
-				pk.VarInt(server.Config.MaxPlayers), // Max players (ignored by client)
-				pk.VarInt(12),                       // View Distance
-				pk.VarInt(12),                       // Simulation Distance
-				pk.Boolean(false),                   // Reduced Debug Info
-				pk.Boolean(false),                   // Enable respawn screen
-				pk.Boolean(false),                   // Is Debug
-				pk.Boolean(false),                   // Is Flat
-				pk.Boolean(false),                   // Has Last Death Location
+				pk.VarInt(server.Config.MaxPlayers),
+				pk.VarInt(server.Config.ViewDistance),
+				pk.VarInt(server.Config.SimulationDistance),
+				pk.Boolean(false),
+				pk.Boolean(false),
+				pk.Boolean(false),
+				pk.Boolean(false),
+				pk.Boolean(false),
 			))
 			conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
-				pk.Position{X: 0, Y: 0, Z: 0},
-				pk.Float(50)))
+				pk.Position{X: int(server.Level.Data.SpawnX), Y: int(server.Level.Data.SpawnY), Z: int(server.Level.Data.SpawnZ)},
+				pk.Float(0)))
 			var lastKeepAliveId int
 			player := &Player{
 				Name: fmt.Sprint(name),

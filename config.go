@@ -43,20 +43,21 @@ type Whitelist struct {
 }
 
 type Config struct {
-	ServerName   string    `yaml:"server_name"`
-	ServerIP     string    `yaml:"server_ip"`
-	ServerPort   int       `yaml:"server_port"`
-	ViewDistance int       `yaml:"view_distance"`
-	MOTD         string    `yaml:"motd"`
-	Icon         Icon      `yaml:"icon"`
-	Whitelist    Whitelist `yaml:"whitelist"`
-	Gamemode     string    `yaml:"gamemode"`
-	Hardcore     bool      `yaml:"hardcore"`
-	MaxPlayers   int       `yaml:"max_players"`
-	Online       bool      `yaml:"online_mode"`
-	Tablist      Tablist   `yaml:"tablist"`
-	Chat         Chat      `yaml:"chat"`
-	Messages     Messages  `yaml:"messages"`
+	ServerName         string    `yaml:"server_name"`
+	ServerIP           string    `yaml:"server_ip"`
+	ServerPort         int       `yaml:"server_port"`
+	ViewDistance       int       `yaml:"view_distance"`
+	SimulationDistance int       `yaml:"simulation_distance"`
+	MOTD               string    `yaml:"motd"`
+	Icon               Icon      `yaml:"icon"`
+	Whitelist          Whitelist `yaml:"whitelist"`
+	Gamemode           string    `yaml:"gamemode"`
+	Hardcore           bool      `yaml:"hardcore"`
+	MaxPlayers         int       `yaml:"max_players"`
+	Online             bool      `yaml:"online_mode"`
+	Tablist            Tablist   `yaml:"tablist"`
+	Chat               Chat      `yaml:"chat"`
+	Messages           Messages  `yaml:"messages"`
 }
 
 func LoadConfig() *Config {
@@ -74,11 +75,12 @@ func LoadConfig() *Config {
 				Enforce: false,
 				Enable:  false,
 			},
-			Gamemode:     "survival",
-			Hardcore:     false,
-			MaxPlayers:   200,
-			Online:       true,
-			ViewDistance: 16,
+			Gamemode:           "survival",
+			Hardcore:           false,
+			MaxPlayers:         200,
+			Online:             true,
+			ViewDistance:       10,
+			SimulationDistance: 10,
 			Messages: Messages{
 				NotInWhitelist:          "You are not whitelisted.",
 				Banned:                  "You are banned from this server.",
