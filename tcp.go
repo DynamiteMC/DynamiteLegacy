@@ -19,7 +19,6 @@ import (
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
-	"github.com/Tnze/go-mc/level"
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
@@ -258,7 +257,7 @@ func HandleTCPRequest(conn net.Conn) {
 				pk.Position{X: 0, Y: 0, Z: 0},
 				pk.Float(50)))
 			var lastKeepAliveId int
-			player := Player{
+			player := &Player{
 				Name: fmt.Sprint(name),
 				UUID: UUID{
 					String: idString,
@@ -268,8 +267,9 @@ func HandleTCPRequest(conn net.Conn) {
 				Properties:   properties,
 				IP:           ip,
 				World:        string(dimensions[0]),
-				LoadedChunks: make(map[[2]int32]*level.Chunk),
+				LoadedChunks: make(map[[2]int32]*LoadedChunk),
 			}
+			joined := false
 			for {
 				var packet pk.Packet
 				err := conn.ReadPacket(&packet)
@@ -281,10 +281,6 @@ func HandleTCPRequest(conn net.Conn) {
 				switch packet.ID {
 				case int32(packetid.ServerboundClientInformation):
 					{
-						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
-						server.Players[idString] = player
-						server.PlayerNames[fmt.Sprint(name)] = idString
-						server.PlayerIDs = append(server.PlayerIDs, idString)
 						packet.Scan(&player.Client.Locale,
 							&player.Client.ViewDistance,
 							&player.Client.ChatMode,
@@ -294,7 +290,14 @@ func HandleTCPRequest(conn net.Conn) {
 							&player.Client.EnableTextFiltering,
 							&player.Client.AllowServerListings,
 						)
+						if joined {
+							continue
+						}
 						server.Players[idString] = player
+						joined = true
+						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
+						server.PlayerNames[fmt.Sprint(name)] = idString
+						server.PlayerIDs = append(server.PlayerIDs, idString)
 						server.Events.Emit("PlayerJoin", player, conn)
 						ticker := time.NewTicker(10 * time.Second)
 						defer ticker.Stop()
@@ -333,16 +336,6 @@ func HandleTCPRequest(conn net.Conn) {
 						)
 						packet.Scan(&x, &y, &z)
 						player.Position = [3]int32{int32(x), int32(y), int32(z)}
-						/*conn.WritePacket(pk.Marshal(packetid.ClientboundSetChunkCacheCenter, pk.VarInt(player.ChunkPos[0]), pk.VarInt(player.ChunkPos[2])))
-						if player.LoadedChunks[player.ChunkPos] != nil {
-							continue
-						}
-						chunk := server.GetChunk([2]int32{player.ChunkPos[0], player.ChunkPos[2]})
-						if chunk == nil {
-							chunk = level.EmptyChunk(24)
-						}
-						player.LoadedChunks[player.ChunkPos] = chunk
-						conn.WritePacket(pk.Marshal(packetid.ClientboundLevelChunkWithLight, level.ChunkPos{player.ChunkPos[0], player.ChunkPos[2]}, chunk))*/
 					}
 				case int32(packetid.ServerboundChat):
 					{
@@ -360,7 +353,6 @@ func HandleTCPRequest(conn net.Conn) {
 						if channel == "minecraft:brand" {
 							player.Client.Brand = data
 						}
-						server.Players[idString] = player
 					}
 				case packetid.LoginDisconnect:
 					{
@@ -391,10 +383,6 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			if max == -1 {
 				max = len(server.Players) + 1
 			}
-			players := make([]Player, 0)
-			for _, player := range server.Players {
-				players = append(players, player)
-			}
 			response := StatusResponse{
 				Version: Version{
 					Name:     "GoCraft 1.19.4",
@@ -403,7 +391,7 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 				Players: Players{
 					Max:    max,
 					Online: len(server.Players),
-					Sample: players,
+					Sample: server.PlayersAsBase(),
 				},
 				Description: Description{
 					Text: server.Config.MOTD,

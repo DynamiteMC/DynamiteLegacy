@@ -48,26 +48,28 @@ LoadChunk:
 				}
 			}
 			lc := world.Chunks[pos]
-			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundLevelChunkWithLight, level.ChunkPos(pos), lc))
+			player.LoadedChunks[pos] = lc
+			lc.AddViewer(player.UUID.String)
+			lc.Lock()
+			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundLevelChunkWithLight, level.ChunkPos(pos), lc.Chunk))
+			lc.Unlock()
 		}
 	}
-	/*for viewer, loader := range w.loaders {
-		loader.calcUnusedChunks()
-		for _, pos := range loader.unloadQueue {
-			delete(loader.loaded, pos)
-			if !w.chunks[pos].RemoveViewer(viewer) {
-				w.log.Panic("viewer is not found in the loaded chunk")
-			}
-			viewer.ViewChunkUnload(pos)
+	for _, player := range server.Players {
+		player.CalculateUnusedChunks()
+		for _, pos := range player.UnloadQueue {
+			delete(player.LoadedChunks, pos)
+			world.Chunks[pos].RemoveViewer(player.UUID.String)
+			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))
 		}
 	}
 	var unloadQueue [][2]int32
 	for pos, chunk := range world.Chunks {
-		if len(chunk.viewers) == 0 {
+		if len(chunk.Viewers) == 0 {
 			unloadQueue = append(unloadQueue, pos)
 		}
 	}
 	for i := range unloadQueue {
-		w.unloadChunk(unloadQueue[i])
-	}*/
+		world.UnloadChunk(unloadQueue[i])
+	}
 }

@@ -145,7 +145,7 @@ func (server *Server) Command(executor string, content string) chat.Message {
 		{
 			gamemode := GetArgument(args, 0)
 			id := GetArgument(args, 1)
-			var player Player
+			var player *Player
 			if gamemode == "" {
 				return chat.Text("§cPlease specify a gamemode")
 			}

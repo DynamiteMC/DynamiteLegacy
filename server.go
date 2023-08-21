@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"net"
@@ -96,6 +97,37 @@ type UUID struct {
 	Binary pk.UUID
 }
 
+type LoadedChunk struct {
+	sync.Mutex
+	Viewers []string
+	*level.Chunk
+}
+
+func (lc *LoadedChunk) AddViewer(player string) {
+	lc.Lock()
+	defer lc.Unlock()
+	for _, v2 := range lc.Viewers {
+		if v2 == player {
+			return
+		}
+	}
+	lc.Viewers = append(lc.Viewers, player)
+}
+
+func (lc *LoadedChunk) RemoveViewer(player string) bool {
+	lc.Lock()
+	defer lc.Unlock()
+	for i, v2 := range lc.Viewers {
+		if v2 == player {
+			last := len(lc.Viewers) - 1
+			lc.Viewers[i] = lc.Viewers[last]
+			lc.Viewers = lc.Viewers[:last]
+			return true
+		}
+	}
+	return false
+}
+
 type Player struct {
 	Name         string
 	UUID         UUID
@@ -106,8 +138,9 @@ type Player struct {
 	Position     [3]int32
 	ChunkPos     [3]int32
 	World        string
-	LoadedChunks map[[2]int32]*level.Chunk
+	LoadedChunks map[[2]int32]*LoadedChunk
 	LoadQueue    [][2]int32
+	UnloadQueue  [][2]int32
 }
 
 var loadList [][2]int32
@@ -125,10 +158,20 @@ func (player *Player) CalculateLoadingQueue() {
 	}
 }
 
-func InitLoader() {
-	const maxR int32 = 32
+func (p *Player) CalculateUnusedChunks() {
+	p.UnloadQueue = p.UnloadQueue[:0]
+	for chunk := range p.LoadedChunks {
+		player := [2]int32{p.ChunkPos[0], p.ChunkPos[2]}
+		r := p.Client.ViewDistance
+		if distance2i([2]int32{chunk[0] - player[0], chunk[1] - player[1]}) > float64(r) {
+			p.UnloadQueue = append(p.UnloadQueue, chunk)
+		}
+	}
+}
 
-	// calculate loadList
+func InitLoader() {
+	var maxR = int32(server.Config.RenderDistance)
+
 	for x := -maxR; x <= maxR; x++ {
 		for z := -maxR; z <= maxR; z++ {
 			pos := [2]int32{x, z}
@@ -141,7 +184,6 @@ func InitLoader() {
 		return distance2i(loadList[i]) < distance2i(loadList[j])
 	})
 
-	// calculate radiusIdx
 	radiusIdx = make([]int, maxR+1)
 	for i, v := range loadList {
 		r := int32(math.Ceil(distance2i(v)))
@@ -152,7 +194,6 @@ func InitLoader() {
 	}
 }
 
-// distance calculates the Euclidean distance that a position to the origin point
 func distance2i(pos [2]int32) float64 {
 	return math.Sqrt(float64(pos[0]*pos[0]) + float64(pos[1]*pos[1]))
 }
@@ -161,7 +202,7 @@ type Playerlist struct{}
 
 type World struct {
 	Name   string
-	Chunks map[[2]int32]*level.Chunk
+	Chunks map[[2]int32]*LoadedChunk
 }
 
 func (w *World) LoadChunk(pos [2]int32) bool {
@@ -176,7 +217,7 @@ func (w *World) LoadChunk(pos [2]int32) bool {
 		}
 		c.Status = level.StatusFull
 	}
-	w.Chunks[pos] = c
+	w.Chunks[pos] = &LoadedChunk{Chunk: c}
 	return true
 }
 
@@ -190,9 +231,20 @@ func (w *World) UnloadChunk(pos [2]int32) {
 	delete(w.Chunks, pos)
 }
 
+func (server Server) PlayersAsBase() []PlayerBase {
+	players := make([]PlayerBase, 0)
+	for _, player := range server.Players {
+		players = append(players, PlayerBase{
+			UUID: player.UUID.String,
+			Name: player.Name,
+		})
+	}
+	return players
+}
+
 type Server struct {
 	Commands      map[string]Command
-	Players       map[string]Player
+	Players       map[string]*Player
 	PlayerNames   map[string]string
 	PlayerIDs     []string
 	Events        Events
@@ -374,7 +426,7 @@ func (server *Server) ParseWorldData() {
 		server.Logger.Error("Failed to parse world data")
 		os.Exit(1)
 	}
-	server.Worlds["world"] = World{Name: "world", Chunks: make(map[[2]int32]*level.Chunk)}
+	server.Worlds["world"] = World{Name: "world", Chunks: make(map[[2]int32]*LoadedChunk)}
 	InitLoader()
 	go server.Worlds["world"].TickLoop()
 	server.Logger.Debug("Parsed world data")
@@ -551,7 +603,7 @@ func (server Server) Message(id string, message chat.Message) {
 	player.Connection.WritePacket(pk.Marshal(packetid.ClientboundSystemChat, message, pk.Boolean(false)))
 }
 
-func (playerlist Playerlist) AddPlayer(player Player) {
+func (playerlist Playerlist) AddPlayer(player *Player) {
 	addPlayerAction := NewPlayerInfoAction(
 		PlayerInfoAddPlayer,
 		PlayerInfoUpdateListed,
@@ -568,11 +620,11 @@ func (playerlist Playerlist) AddPlayer(player Player) {
 	server.BroadcastPacket(pk.Packet{ID: int32(packetid.ClientboundPlayerInfoUpdate), Data: buf.Bytes()})
 }
 
-func (playerlist Playerlist) RemovePlayer(player Player) {
+func (playerlist Playerlist) RemovePlayer(player *Player) {
 	server.BroadcastPacket(pk.Marshal(packetid.ClientboundPlayerInfoRemove, pk.Array([]pk.UUID{player.UUID.Binary})))
 }
 
-func (playerlist Playerlist) GetTexts(player Player) (string, string) {
+func (playerlist Playerlist) GetTexts(player *Player) (string, string) {
 	group, prefix, suffix := server.GetGroup(player.UUID.String)
 	header := ParsePlaceholders(strings.Join(server.Config.Tablist.Header, "\n"), Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerGroup: group})
 	footer := ParsePlaceholders(strings.Join(server.Config.Tablist.Footer, "\n"), Placeholders{PlayerName: player.Name, PlayerSuffix: suffix, PlayerGroup: group})

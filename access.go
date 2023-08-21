@@ -103,7 +103,7 @@ func ValidatePlayer(name string, id string, ip string) int {
 			return 1
 		}
 	}
-	if server.Players[id].UUID.String == id {
+	if server.Players[id] != nil {
 		return 4
 	}
 	if server.Config.MaxPlayers == -1 {

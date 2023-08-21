@@ -18,7 +18,7 @@ func CreateEvents() {
 }
 
 func OnPlayerJoin(params ...interface{}) {
-	player := params[0].(Player)
+	player := params[0].(*Player)
 	connection := params[1].(net.Conn)
 	header, footer := server.Playerlist.GetTexts(player)
 	connection.WritePacket(pk.Marshal(0x17, pk.Identifier("minecraft:brand"), pk.String("GoCraft")))
@@ -54,7 +54,7 @@ func OnPlayerJoin(params ...interface{}) {
 }
 
 func OnPlayerLeave(params ...interface{}) {
-	player := params[0].(Player)
+	player := params[0].(*Player)
 	delete(server.Players, player.UUID.String)
 	delete(server.PlayerNames, player.Name)
 
@@ -77,7 +77,7 @@ func OnPlayerChatMessage(params ...interface{}) {
 	if !server.Config.Chat.Enable {
 		return
 	}
-	player := params[0].(Player)
+	player := params[0].(*Player)
 	if !server.HasPermissions(player.UUID.String, []string{"server.chat"}) {
 		return
 	}
@@ -93,7 +93,7 @@ func OnPlayerChatMessage(params ...interface{}) {
 }
 
 func OnPlayerCommand(params ...interface{}) {
-	player := params[0].(Player)
+	player := params[0].(*Player)
 	command := params[1].(pk.String)
 	server.BroadcastMessageAdmin(player.UUID.String, chat.Text(fmt.Sprintf("Player %s (%s) executed command %s", player.Name, player.UUID.String, command)))
 	server.Message(player.UUID.String, server.Command(player.UUID.String, fmt.Sprint(command)))

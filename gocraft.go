@@ -12,7 +12,7 @@ import (
 
 var server = Server{
 	Config:      LoadConfig(),
-	Players:     make(map[string]Player),
+	Players:     make(map[string]*Player),
 	PlayerNames: make(map[string]string),
 	PlayerIDs:   make([]string, 0),
 	Events:      Events{_Events: make(map[string][]func(...interface{}))},
