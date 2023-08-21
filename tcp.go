@@ -274,6 +274,9 @@ func HandleTCPRequest(conn net.Conn) {
 				var packet pk.Packet
 				err := conn.ReadPacket(&packet)
 				if err != nil {
+					for _, chunk := range player.LoadedChunks {
+						chunk.RemoveViewer(player.UUID.String)
+					}
 					server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
 					server.Events.Emit("PlayerLeave", player)
 					return
