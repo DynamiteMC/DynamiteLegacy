@@ -230,8 +230,9 @@ func HandleTCPRequest(conn net.Conn) {
 				gamemode = 3
 			}
 			hashedSeed := [8]byte{}
-			dimensions := []pk.Identifier{
-				"world",
+			var dimensions []pk.Identifier
+			for name := range server.Worlds {
+				dimensions = append(dimensions, pk.Identifier(name))
 			}
 			conn.WritePacket(pk.Marshal(
 				packetid.ClientboundLogin,
@@ -267,7 +268,7 @@ func HandleTCPRequest(conn net.Conn) {
 				Properties:   properties,
 				IP:           ip,
 				World:        string(dimensions[0]),
-				LoadedChunks: make(map[[3]int32]*level.Chunk),
+				LoadedChunks: make(map[[2]int32]*level.Chunk),
 			}
 			for {
 				var packet pk.Packet
@@ -331,9 +332,8 @@ func HandleTCPRequest(conn net.Conn) {
 							z pk.Double
 						)
 						packet.Scan(&x, &y, &z)
-						player.ChunkPos = [3]int32{int32(x) >> 4, int32(y) >> 4, int32(z) >> 4}
 						player.Position = [3]int32{int32(x), int32(y), int32(z)}
-						conn.WritePacket(pk.Marshal(packetid.ClientboundSetChunkCacheCenter, pk.VarInt(player.ChunkPos[0]), pk.VarInt(player.ChunkPos[2])))
+						/*conn.WritePacket(pk.Marshal(packetid.ClientboundSetChunkCacheCenter, pk.VarInt(player.ChunkPos[0]), pk.VarInt(player.ChunkPos[2])))
 						if player.LoadedChunks[player.ChunkPos] != nil {
 							continue
 						}
@@ -342,7 +342,7 @@ func HandleTCPRequest(conn net.Conn) {
 							chunk = level.EmptyChunk(24)
 						}
 						player.LoadedChunks[player.ChunkPos] = chunk
-						conn.WritePacket(pk.Marshal(packetid.ClientboundLevelChunkWithLight, level.ChunkPos{player.ChunkPos[0], player.ChunkPos[2]}, chunk))
+						conn.WritePacket(pk.Marshal(packetid.ClientboundLevelChunkWithLight, level.ChunkPos{player.ChunkPos[0], player.ChunkPos[2]}, chunk))*/
 					}
 				case int32(packetid.ServerboundChat):
 					{

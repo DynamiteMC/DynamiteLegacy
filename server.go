@@ -9,8 +9,10 @@ import (
 	"image"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -20,6 +22,7 @@ import (
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
 	"github.com/Tnze/go-mc/level"
+	"github.com/Tnze/go-mc/level/block"
 	"github.com/Tnze/go-mc/nbt"
 	mcnet "github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
@@ -103,10 +106,89 @@ type Player struct {
 	Position     [3]int32
 	ChunkPos     [3]int32
 	World        string
-	LoadedChunks map[[3]int32]*level.Chunk
+	LoadedChunks map[[2]int32]*level.Chunk
+	LoadQueue    [][2]int32
+}
+
+var loadList [][2]int32
+
+var radiusIdx []int
+
+func (player *Player) CalculateLoadingQueue() {
+	player.LoadQueue = player.LoadQueue[:0]
+	for _, v := range loadList[:radiusIdx[player.Client.ViewDistance]] {
+		pos := [2]int32{player.ChunkPos[0], player.ChunkPos[2]}
+		pos[0], pos[1] = pos[0]+v[0], pos[1]+v[1]
+		if _, ok := player.LoadedChunks[pos]; !ok {
+			player.LoadQueue = append(player.LoadQueue, pos)
+		}
+	}
+}
+
+func InitLoader() {
+	const maxR int32 = 32
+
+	// calculate loadList
+	for x := -maxR; x <= maxR; x++ {
+		for z := -maxR; z <= maxR; z++ {
+			pos := [2]int32{x, z}
+			if distance2i(pos) < float64(maxR) {
+				loadList = append(loadList, pos)
+			}
+		}
+	}
+	sort.Slice(loadList, func(i, j int) bool {
+		return distance2i(loadList[i]) < distance2i(loadList[j])
+	})
+
+	// calculate radiusIdx
+	radiusIdx = make([]int, maxR+1)
+	for i, v := range loadList {
+		r := int32(math.Ceil(distance2i(v)))
+		if r > maxR {
+			break
+		}
+		radiusIdx[r] = i
+	}
+}
+
+// distance calculates the Euclidean distance that a position to the origin point
+func distance2i(pos [2]int32) float64 {
+	return math.Sqrt(float64(pos[0]*pos[0]) + float64(pos[1]*pos[1]))
 }
 
 type Playerlist struct{}
+
+type World struct {
+	Name   string
+	Chunks map[[2]int32]*level.Chunk
+}
+
+func (w *World) LoadChunk(pos [2]int32) bool {
+	c := server.GetChunk(pos)
+	if c == nil {
+		c = level.EmptyChunk(24)
+		stone := block.ToStateID[block.Stone{}]
+		for s := range c.Sections {
+			for i := 0; i < 16*16*16; i++ {
+				c.Sections[s].SetBlock(i, stone)
+			}
+		}
+		c.Status = level.StatusFull
+	}
+	w.Chunks[pos] = c
+	return true
+}
+
+func (w *World) UnloadChunk(pos [2]int32) {
+	for _, player := range server.Players {
+		if player.World != w.Name {
+			continue
+		}
+		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))
+	}
+	delete(w.Chunks, pos)
+}
 
 type Server struct {
 	Commands      map[string]Command
@@ -128,6 +210,7 @@ type Server struct {
 	UDPListener   *net.UDPConn
 	EntityCounter int
 	Mojang        MojangAPI
+	Worlds        map[string]World
 }
 
 type Node struct {
@@ -291,6 +374,9 @@ func (server *Server) ParseWorldData() {
 		server.Logger.Error("Failed to parse world data")
 		os.Exit(1)
 	}
+	server.Worlds["world"] = World{Name: "world", Chunks: make(map[[2]int32]*level.Chunk)}
+	InitLoader()
+	go server.Worlds["world"].TickLoop()
 	server.Logger.Debug("Parsed world data")
 }
 
@@ -332,6 +418,7 @@ func (server *Server) Init() {
 	server.OPs = LoadPlayerList("ops.json")
 	server.BannedPlayers = LoadPlayerList("banned_players.json")
 	server.BannedIPs = LoadIPBans()
+	server.Worlds = make(map[string]World)
 	server.LoadAllPlugins()
 	os.MkdirAll("permissions/groups", 0755)
 	os.MkdirAll("permissions/players", 0755)

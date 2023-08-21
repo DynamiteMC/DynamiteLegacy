@@ -15,7 +15,7 @@ Feel free to contribute by making an issue or pull request
 - [x] Tab
 - [x] Chat
 - [x] Permissions
-- [WIP] Chunk loading (buggy)
+- [x] Chunk loading
 - [WIP] Commands
     - [x] /op
     - [x] /gamemode
