@@ -19,6 +19,7 @@ import (
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
+	"github.com/Tnze/go-mc/level"
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
@@ -229,17 +230,19 @@ func HandleTCPRequest(conn net.Conn) {
 				gamemode = 3
 			}
 			hashedSeed := [8]byte{}
-			fields := []pk.FieldEncoder{
+			dimensions := []pk.Identifier{
+				"world",
+			}
+			conn.WritePacket(pk.Marshal(
+				packetid.ClientboundLogin,
 				pk.Int(server.NewEntityID()),
 				pk.Boolean(server.Config.Hardcore),
 				pk.UnsignedByte(gamemode),
 				pk.Byte(-1),
-				pk.Array([]pk.Identifier{
-					pk.Identifier("world"),
-				}),
+				pk.Array(dimensions),
 				pk.NBT(getNetworkRegistry(Protocol)),
 				pk.Identifier("minecraft:overworld"),
-				pk.Identifier("world"),
+				pk.Identifier(dimensions[0]),
 				pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
 				pk.VarInt(server.Config.MaxPlayers), // Max players (ignored by client)
 				pk.VarInt(12),                       // View Distance
@@ -249,16 +252,7 @@ func HandleTCPRequest(conn net.Conn) {
 				pk.Boolean(false),                   // Is Debug
 				pk.Boolean(false),                   // Is Flat
 				pk.Boolean(false),                   // Has Last Death Location
-			}
-			if Protocol >= PROTOCOL_1_20 {
-				fields = append(fields, pk.VarInt(3))
-			}
-			if Protocol >= PROTOCOL_1_19 {
-				conn.WritePacket(pk.Marshal(
-					packetid.ClientboundLogin,
-					fields...,
-				))
-			}
+			))
 			conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 				pk.Position{X: 0, Y: 0, Z: 0},
 				pk.Float(50)))
@@ -269,9 +263,11 @@ func HandleTCPRequest(conn net.Conn) {
 					String: idString,
 					Binary: id,
 				},
-				Connection: &conn,
-				Properties: properties,
-				IP:         ip,
+				Connection:   &conn,
+				Properties:   properties,
+				IP:           ip,
+				World:        string(dimensions[0]),
+				LoadedChunks: make(map[[3]int32]*level.Chunk),
 			}
 			for {
 				var packet pk.Packet
@@ -326,6 +322,27 @@ func HandleTCPRequest(conn net.Conn) {
 
 						packet.Scan(&command)
 						server.Events.Emit("PlayerCommand", player, command)
+					}
+				case int32(packetid.ServerboundMovePlayerPos):
+					{
+						var (
+							x pk.Double
+							y pk.Double
+							z pk.Double
+						)
+						packet.Scan(&x, &y, &z)
+						player.ChunkPos = [3]int32{int32(x) >> 4, int32(y) >> 4, int32(z) >> 4}
+						player.Position = [3]int32{int32(x), int32(y), int32(z)}
+						conn.WritePacket(pk.Marshal(packetid.ClientboundSetChunkCacheCenter, pk.VarInt(player.ChunkPos[0]), pk.VarInt(player.ChunkPos[2])))
+						if player.LoadedChunks[player.ChunkPos] != nil {
+							continue
+						}
+						chunk := server.GetChunk([2]int32{player.ChunkPos[0], player.ChunkPos[2]})
+						if chunk == nil {
+							chunk = level.EmptyChunk(24)
+						}
+						player.LoadedChunks[player.ChunkPos] = chunk
+						conn.WritePacket(pk.Marshal(packetid.ClientboundLevelChunkWithLight, level.ChunkPos{player.ChunkPos[0], player.ChunkPos[2]}, chunk))
 					}
 				case int32(packetid.ServerboundChat):
 					{

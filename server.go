@@ -94,12 +94,16 @@ type UUID struct {
 }
 
 type Player struct {
-	Name       string
-	UUID       UUID
-	Connection *mcnet.Conn
-	Properties []user.Property
-	Client     ClientData
-	IP         string
+	Name         string
+	UUID         UUID
+	Connection   *mcnet.Conn
+	Properties   []user.Property
+	Client       ClientData
+	IP           string
+	Position     [3]int32
+	ChunkPos     [3]int32
+	World        string
+	LoadedChunks map[[3]int32]*level.Chunk
 }
 
 type Playerlist struct{}
@@ -337,9 +341,6 @@ func (server *Server) Init() {
 		server.Logger.Warn("Offline mode is insecure. You can disable this message using -no_offline_warn")
 	}
 	server.ParseWorldData()
-	if server.Level.Data.Version.Name != "1.19.4" && !HasArg("-no_world_version_warn") {
-		server.Logger.Warn("The world imported did not come from a 1.19.4 world. You can disable this message using -no_world_version_warn")
-	}
 	TCPListen()
 	CreateEvents()
 }
