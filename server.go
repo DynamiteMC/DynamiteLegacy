@@ -149,7 +149,11 @@ var radiusIdx []int
 
 func (player *Player) CalculateLoadingQueue() {
 	player.LoadQueue = player.LoadQueue[:0]
-	for _, v := range loadList[:radiusIdx[player.Client.ViewDistance]] {
+	rd := player.Client.ViewDistance
+	if rd > pk.Byte(server.Config.ViewDistance) {
+		rd = pk.Byte(server.Config.ViewDistance)
+	}
+	for _, v := range loadList[:radiusIdx[rd]] {
 		pos := [2]int32{player.ChunkPos[0], player.ChunkPos[2]}
 		pos[0], pos[1] = pos[0]+v[0], pos[1]+v[1]
 		if _, ok := player.LoadedChunks[pos]; !ok {
@@ -170,7 +174,7 @@ func (p *Player) CalculateUnusedChunks() {
 }
 
 func InitLoader() {
-	var maxR = int32(server.Config.RenderDistance)
+	var maxR = int32(server.Config.ViewDistance)
 
 	for x := -maxR; x <= maxR; x++ {
 		for z := -maxR; z <= maxR; z++ {
