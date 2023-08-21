@@ -12,8 +12,6 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-var consoleText []string
-var guiConsole *widget.TextGrid
 var playerCountText *widget.RichText
 var playerContainer *widget.List
 
@@ -23,14 +21,14 @@ func LaunchGUI() fyne.Window {
 	title := widget.NewRichTextFromMarkdown("# GoCraft Server")
 
 	consoleTitle := widget.NewRichTextFromMarkdown("## Console")
-	guiConsole = widget.NewTextGridFromString(strings.Join(consoleText, "\n"))
+	server.Logger.GUIConsole = widget.NewTextGridFromString(strings.Join(server.Logger.ConsoleText, "\n"))
 	command := widget.NewEntry()
 	command.SetPlaceHolder("Input a command")
 	command.OnSubmitted = func(s string) {
 		server.Command("console", s)
 		command.SetText("")
 	}
-	console := container.NewBorder(consoleTitle, command, nil, nil, container.NewScroll(guiConsole))
+	console := container.NewBorder(consoleTitle, command, nil, nil, container.NewScroll(server.Logger.GUIConsole))
 
 	playersTitle := widget.NewRichTextFromMarkdown("## Players")
 	max := fmt.Sprint(server.Config.MaxPlayers)

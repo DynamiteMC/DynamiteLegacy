@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	"gocraft/logger"
 	"os"
 	"os/signal"
 	"time"
@@ -78,7 +79,7 @@ func main() {
 		}
 	}()
 	go CreateSTDINReader()
-	if HasArg("-gui") {
+	if logger.HasArg("-gui") {
 		go func() {
 			for {
 				conn, err := server.TCPListener.Accept()

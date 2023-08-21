@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	"gocraft/logger"
 	"image"
 	"io"
 	"io/fs"
@@ -253,7 +254,7 @@ type Server struct {
 	PlayerIDs     []string
 	Events        Events
 	Config        *Config
-	Logger        Logger
+	Logger        logger.Logger
 	Playerlist    Playerlist
 	StartTime     int64
 	Whitelist     []PlayerBase
@@ -480,7 +481,7 @@ func (server *Server) Init() {
 	os.MkdirAll("permissions/players", 0755)
 	os.WriteFile("permissions/groups/default.json", []byte(`{"display_name":"default","permissions":{"server.chat":true}}`), 0755)
 	server.Logger.Debug("Loaded player info")
-	if !server.Config.Online && !HasArg("-no_offline_warn") {
+	if !server.Config.Online && !logger.HasArg("-no_offline_warn") {
 		server.Logger.Warn("Offline mode is insecure. You can disable this message using -no_offline_warn")
 	}
 	server.ParseWorldData()

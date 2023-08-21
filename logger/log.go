@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"fyne.io/fyne/v2/widget"
 	"github.com/fatih/color"
 )
 
@@ -19,13 +20,15 @@ func HasArg(arg string) bool {
 }
 
 type Logger struct {
-	FilePath string
+	FilePath    string
+	ConsoleText []string
+	GUIConsole  *widget.TextGrid
 }
 
 func (logger Logger) Append(str string) {
-	consoleText = append(consoleText, str)
-	if guiConsole != nil {
-		guiConsole.SetText(strings.Join(consoleText, "\n"))
+	logger.ConsoleText = append(logger.ConsoleText, str)
+	if logger.GUIConsole != nil {
+		logger.GUIConsole.SetText(strings.Join(logger.ConsoleText, "\n"))
 	}
 }
 
