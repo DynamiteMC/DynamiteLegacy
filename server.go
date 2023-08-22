@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/Tnze/go-mc/chat"
@@ -116,7 +117,9 @@ func (w *World) LoadChunk(pos [2]int32) bool {
 		c = level.EmptyChunk(24)
 		c.Status = level.StatusFull
 	}
+	w.Lock()
 	w.Chunks[pos] = &LoadedChunk{Chunk: c}
+	w.Unlock()
 	return true
 }
 
@@ -127,7 +130,9 @@ func (w *World) UnloadChunk(pos [2]int32) {
 		}
 		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))
 	}
+	w.Lock()
 	delete(w.Chunks, pos)
+	w.Unlock()
 }
 
 func (server Server) PlayersAsBase() []PlayerBase {
@@ -172,7 +177,16 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 	var rootChildren []int32
 	var nodes []Node
 	i := 1
-	for _, command := range server.Commands {
+	commands := server.Commands
+	for _, command := range commands {
+		for _, alias := range command.Aliases {
+			cmd := command
+			cmd.Aliases = []string{}
+			cmd.Name = alias
+			commands[alias] = cmd
+		}
+	}
+	for _, command := range commands {
 		if !server.HasPermissions(graph.PlayerID, command.RequiredPermissions) {
 			continue
 		}
@@ -317,7 +331,9 @@ func (server *Server) ParseWorldData() {
 		server.Logger.Error("Failed to parse world data")
 		os.Exit(1)
 	}
-	server.Worlds["minecraft:overworld"] = World{Name: "minecraft:overworld", Chunks: make(map[[2]int32]*LoadedChunk)}
+	server.Lock()
+	server.Worlds["minecraft:overworld"] = World{Name: "minecraft:overworld", Chunks: make(map[[2]int32]*LoadedChunk), Mutex: &sync.Mutex{}}
+	server.Unlock()
 	InitLoader()
 	go server.Worlds["minecraft:overworld"].TickLoop()
 	server.Logger.Debug("Parsed world data")
@@ -362,11 +378,14 @@ func (server Server) GetChunk(pos [2]int32) *level.Chunk {
 }
 
 func (server *Server) Init() {
+	server.Mutex = &sync.Mutex{}
+	server.Lock()
 	server.Whitelist = LoadPlayerList("whitelist.json")
 	server.OPs = LoadPlayerList("ops.json")
 	server.BannedPlayers = LoadPlayerList("banned_players.json")
 	server.BannedIPs = LoadIPBans()
 	server.Worlds = make(map[string]World)
+	server.Unlock()
 	server.LoadAllPlugins()
 	os.MkdirAll("permissions/groups", 0755)
 	os.MkdirAll("permissions/players", 0755)
@@ -396,7 +415,9 @@ func (server *Server) GetFavicon() (bool, int, []byte) {
 				return false, 2, data
 			}
 		}
+		server.Lock()
 		server.Favicon = data
+		server.Unlock()
 	} else {
 		data = server.Favicon
 	}

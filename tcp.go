@@ -135,12 +135,12 @@ func HandleTCPRequest(conn net.Conn) {
 		handleTCPPing(conn, Protocol, ip) // Ping
 	case 2:
 		{ // login
-			if 762 > int(Protocol) {
+			if PROTOCOL_1_19_4 > int(Protocol) {
 				conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolOld)))
 				conn.Close()
 				return
 			}
-			if 762 < int(Protocol) {
+			if PROTOCOL_1_19_4 < int(Protocol) {
 				conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.ProtocolNew)))
 				conn.Close()
 				return
@@ -336,7 +336,6 @@ func HandleTCPRequest(conn net.Conn) {
 				err := conn.ReadPacket(&packet)
 				if err != nil {
 					for pos := range player.LoadedChunks {
-						//server.Worlds[player.Data["Dimension"].(string)].
 						server.Worlds[player.Data.Dimension].Chunks[pos].RemoveViewer(player.UUID.String)
 					}
 					server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
@@ -358,11 +357,13 @@ func HandleTCPRequest(conn net.Conn) {
 						if joined {
 							continue
 						}
+						server.Lock()
 						server.Players[idString] = player
 						joined = true
-						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 						server.PlayerNames[fmt.Sprint(name)] = idString
 						server.PlayerIDs = append(server.PlayerIDs, idString)
+						server.Unlock()
+						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 						server.Events.Emit("PlayerJoin", player, conn)
 						ticker := time.NewTicker(10 * time.Second)
 						defer ticker.Stop()
@@ -439,7 +440,7 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			response := StatusResponse{
 				Version: Version{
 					Name:     "GoCraft 1.19.4",
-					Protocol: 762,
+					Protocol: PROTOCOL_1_19_4,
 				},
 				Players: Players{
 					Max:    max,

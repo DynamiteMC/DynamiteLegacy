@@ -39,6 +39,27 @@ var server = Server{
 				},
 			},
 		},
+		"teleport": {
+			Name:                "teleport",
+			RequiredPermissions: []string{"server.command.teleport"},
+			Aliases:             []string{"tp"},
+			Arguments: []Argument{
+				{
+					Name: "one",
+					Parser: Parser{
+						ID:   8,
+						Name: "minecraft:block_pos",
+					},
+				},
+				{
+					Name: "two",
+					Parser: Parser{
+						ID:   8,
+						Name: "minecraft:block_pos",
+					},
+				},
+			},
+		},
 		"op": {
 			Name:                "op",
 			RequiredPermissions: []string{"server.command.op"},
@@ -56,6 +77,7 @@ var server = Server{
 		"reload": {
 			Name:                "reload",
 			RequiredPermissions: []string{"server.command.reload"},
+			Aliases:             []string{"rl"},
 		},
 		"stop": {
 			Name:                "stop",

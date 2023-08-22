@@ -79,7 +79,7 @@ func (server *Server) Command(executor string, content string) chat.Message {
 		return chat.Text(server.Config.Messages.InsufficientPermissions)
 	}
 	switch cmd {
-	case "reload":
+	case "reload", "rl":
 		return Reload()
 	case "stop":
 		{
@@ -192,11 +192,12 @@ func (server *Server) Command(executor string, content string) chat.Message {
 	case "ram":
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
-		fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
-		fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
-		fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
-		fmt.Printf("\tNumGC = %v\n", m.NumGC)
-		return chat.Text("")
+		return chat.Text(fmt.Sprintf("Allocated: %v MiB, TotalAllocated: %v MiB", bToMb(m.Alloc), bToMb(m.TotalAlloc)))
+	case "teleport", "tp":
+		{
+			fmt.Println(content)
+			return chat.Text("h")
+		}
 	default:
 		return chat.Text(server.Config.Messages.UnknownCommand)
 	}

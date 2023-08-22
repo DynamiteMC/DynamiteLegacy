@@ -16,6 +16,7 @@ import (
 type Playerlist struct{}
 
 type World struct {
+	*sync.Mutex
 	Name   string
 	Chunks map[[2]int32]*LoadedChunk
 }
@@ -116,6 +117,7 @@ type ClientData struct {
 }
 
 type Server struct {
+	*sync.Mutex
 	Commands        map[string]Command
 	Players         map[string]*Player
 	PlayerNames     map[string]string
@@ -169,6 +171,7 @@ type Command struct {
 	Redirect            int
 	RequiredPermissions []string
 	Arguments           []Argument
+	Aliases             []string
 }
 
 type UUID struct {
