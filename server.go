@@ -16,93 +16,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"unsafe"
-
-	"net"
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
 	"github.com/Tnze/go-mc/level"
-	"github.com/Tnze/go-mc/level/block"
 	"github.com/Tnze/go-mc/nbt"
-	mcnet "github.com/Tnze/go-mc/net"
 	pk "github.com/Tnze/go-mc/net/packet"
 	"github.com/Tnze/go-mc/save"
 	"github.com/Tnze/go-mc/save/region"
-	"github.com/Tnze/go-mc/yggdrasil/user"
 )
-
-const (
-	CHAT_ENABLED = iota
-	CHAT_COMMANDS_ONLY
-	CHAT_HIDDEN
-)
-
-const (
-	LEFT_HAND = iota
-	RIGHT_HAND
-)
-
-const (
-	FAVICON_NOTFOUND = iota
-	FAVICON_INVALID_FORMAT
-	FAVICON_INVALID_DIMENSIONS
-)
-
-const (
-	PLUGINCODE_INFO = iota
-	PLUGINCODE_LOG
-)
-
-type Events struct {
-	_Events map[string][]func(...interface{})
-}
-
-type ClientData struct {
-	Locale              pk.String
-	ViewDistance        pk.Byte
-	ChatMode            pk.VarInt
-	ChatColors          pk.Boolean
-	DisplayedSkinParts  pk.UnsignedByte
-	MainHand            pk.VarInt
-	EnableTextFiltering pk.Boolean
-	AllowServerListings pk.Boolean
-	Brand               pk.String
-}
-
-type Parser struct {
-	ID         int
-	Name       string
-	Properties pk.FieldEncoder
-}
-
-type Argument struct {
-	Name                string
-	Redirect            int
-	RequiredPermissions []string
-	SuggestionsType     string
-	Parser              Parser
-	Optional            bool
-}
-
-type Command struct {
-	Name                string
-	Redirect            int
-	RequiredPermissions []string
-	Arguments           []Argument
-}
-
-type UUID struct {
-	String string
-	Binary pk.UUID
-}
-
-type LoadedChunk struct {
-	sync.Mutex
-	Viewers []string
-	*level.Chunk
-}
 
 func (lc *LoadedChunk) AddViewer(player string) {
 	lc.Lock()
@@ -127,21 +50,6 @@ func (lc *LoadedChunk) RemoveViewer(player string) bool {
 		}
 	}
 	return false
-}
-
-type Player struct {
-	Name         string
-	UUID         UUID
-	Connection   *mcnet.Conn
-	Properties   []user.Property
-	Client       ClientData
-	IP           string
-	Position     [3]int32
-	ChunkPos     [3]int32
-	World        string
-	LoadedChunks map[[2]int32]*LoadedChunk
-	LoadQueue    [][2]int32
-	UnloadQueue  [][2]int32
 }
 
 var loadList [][2]int32
@@ -202,24 +110,10 @@ func InitLoader() {
 func distance2i(pos [2]int32) float64 {
 	return math.Sqrt(float64(pos[0]*pos[0]) + float64(pos[1]*pos[1]))
 }
-
-type Playerlist struct{}
-
-type World struct {
-	Name   string
-	Chunks map[[2]int32]*LoadedChunk
-}
-
 func (w *World) LoadChunk(pos [2]int32) bool {
 	c := server.GetChunk(pos)
 	if c == nil {
 		c = level.EmptyChunk(24)
-		stone := block.ToStateID[block.Stone{}]
-		for s := range c.Sections {
-			for i := 0; i < 16*16*16; i++ {
-				c.Sections[s].SetBlock(i, stone)
-			}
-		}
 		c.Status = level.StatusFull
 	}
 	w.Chunks[pos] = &LoadedChunk{Chunk: c}
@@ -228,7 +122,7 @@ func (w *World) LoadChunk(pos [2]int32) bool {
 
 func (w *World) UnloadChunk(pos [2]int32) {
 	for _, player := range server.Players {
-		if player.World != w.Name {
+		if player.Data.Dimension != w.Name {
 			continue
 		}
 		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))
@@ -247,38 +141,30 @@ func (server Server) PlayersAsBase() []PlayerBase {
 	return players
 }
 
-type Server struct {
-	Commands      map[string]Command
-	Players       map[string]*Player
-	PlayerNames   map[string]string
-	PlayerIDs     []string
-	Events        Events
-	Config        *Config
-	Logger        logger.Logger
-	Playerlist    Playerlist
-	StartTime     int64
-	Whitelist     []PlayerBase
-	OPs           []PlayerBase
-	BannedPlayers []PlayerBase
-	BannedIPs     []string
-	Favicon       []byte
-	Level         save.Level
-	TCPListener   *mcnet.Listener
-	UDPListener   *net.UDPConn
-	EntityCounter int
-	Mojang        MojangAPI
-	Worlds        map[string]World
+func (server Server) GetPlayerData(playerId string) *PlayerData {
+	var player PlayerData
+	path := fmt.Sprintf("world/playerdata/%s.dat", playerId)
+	file, err := os.Open(path)
+	data, _ := gzip.NewReader(file)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else {
+		defer file.Close()
+		decoder := nbt.NewDecoder(data)
+		decoder.Decode(&player)
+	}
+	return &player
 }
 
-type Node struct {
-	Parent     int
-	Children   []int
-	Data       interface{}
-	EntryIndex int
-}
-
-type CommandGraph struct {
-	PlayerID string
+func (server Server) WritePlayerData(playerId string, data PlayerData) error {
+	path := fmt.Sprintf("world/playerdata/%s.dat", playerId)
+	var w bytes.Buffer
+	writer := gzip.NewWriter(&w)
+	f, _ := nbt.Marshal(data)
+	writer.Write(f)
+	writer.Close()
+	os.WriteFile(path, w.Bytes(), 0755)
+	return nil
 }
 
 func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
@@ -431,15 +317,20 @@ func (server *Server) ParseWorldData() {
 		server.Logger.Error("Failed to parse world data")
 		os.Exit(1)
 	}
-	server.Worlds["world"] = World{Name: "world", Chunks: make(map[[2]int32]*LoadedChunk)}
+	server.Worlds["minecraft:overworld"] = World{Name: "minecraft:overworld", Chunks: make(map[[2]int32]*LoadedChunk)}
 	InitLoader()
-	go server.Worlds["world"].TickLoop()
+	go server.Worlds["minecraft:overworld"].TickLoop()
 	server.Logger.Debug("Parsed world data")
 }
 
 func (server *Server) NewEntityID() int {
 	server.EntityCounter += 1
 	return server.EntityCounter
+}
+
+func (server *Server) NewTeleportID() int {
+	server.TeleportCounter += 1
+	return server.TeleportCounter
 }
 
 func (server Server) GetChunk(pos [2]int32) *level.Chunk {

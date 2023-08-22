@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/Tnze/go-mc/chat"
@@ -135,7 +136,7 @@ func (server *Server) Command(executor string, content string) chat.Message {
 				}
 			}
 			server.OPs = WritePlayerList("ops.json", player)
-			if server.Players[player.UUID].UUID.String == player.UUID {
+			if server.Players[player.UUID] != nil {
 				server.Players[player.UUID].Connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{player.UUID}))
 			}
 			server.BroadcastMessageAdmin(executor, chat.Text(fmt.Sprintf("§7[%s: Made %s a server operator]", executorName, player.Name)))
@@ -188,7 +189,19 @@ func (server *Server) Command(executor string, content string) chat.Message {
 				return chat.Text(fmt.Sprintf("Set %s's gamemode to %s", player.Name, gamemode))
 			}
 		}
+	case "ram":
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
+		fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
+		fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
+		fmt.Printf("\tNumGC = %v\n", m.NumGC)
+		return chat.Text("")
 	default:
 		return chat.Text(server.Config.Messages.UnknownCommand)
 	}
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }

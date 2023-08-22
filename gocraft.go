@@ -61,6 +61,10 @@ var server = Server{
 			Name:                "stop",
 			RequiredPermissions: []string{"server.command.stop"},
 		},
+		"ram": {
+			Name:                "ram",
+			RequiredPermissions: []string{},
+		},
 	},
 }
 
@@ -82,7 +86,7 @@ func main() {
 	if logger.HasArg("-gui") {
 		go func() {
 			for {
-				conn, err := server.TCPListener.Accept()
+				conn, err := server.Listener.Accept()
 				if err != nil {
 					continue
 				}
@@ -95,7 +99,7 @@ func main() {
 	} else {
 		server.Logger.Info("Done! (%ds)", time.Now().Unix()-server.StartTime)
 		for {
-			conn, err := server.TCPListener.Accept()
+			conn, err := server.Listener.Accept()
 			if err != nil {
 				continue
 			}

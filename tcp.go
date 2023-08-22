@@ -105,7 +105,7 @@ func (d *MojangLoginHandler) getPrivateKey() (key *rsa.PrivateKey, err error) {
 
 func TCPListen() {
 	var err error
-	server.TCPListener, err = net.ListenMC(server.Config.ServerIP + ":" + fmt.Sprint(server.Config.ServerPort))
+	server.Listener, err = net.ListenMC(server.Config.ServerIP + ":" + fmt.Sprint(server.Config.ServerPort))
 	if err != nil {
 		server.Logger.Error("[TCP] Failed to listen: %s", err.Error())
 		os.Exit(1)
@@ -228,6 +228,63 @@ func HandleTCPRequest(conn net.Conn) {
 			for name := range server.Worlds {
 				dimensions = append(dimensions, pk.Identifier(name))
 			}
+			data := server.GetPlayerData(idString)
+			if data == nil {
+				data = &PlayerData{
+					Attributes:       []interface{}{},
+					OnGround:         1,
+					Health:           20,
+					Dimension:        string(dimensions[0]),
+					Fire:             -20,
+					Score:            0,
+					SelectedItemSlot: 0,
+					EnderItems:       []interface{}{},
+					Inventory:        []interface{}{},
+					Pos: []float64{
+						float64(server.Level.Data.SpawnX),
+						float64(server.Level.Data.SpawnY),
+						float64(server.Level.Data.SpawnZ),
+					},
+					Motion: []interface{}{
+						float64(0),
+						float64(0),
+						float64(0),
+					},
+					Rotation: []float32{
+						90,
+						90,
+					},
+					XpLevel:             0,
+					XpTotal:             0,
+					XpP:                 0,
+					DeathTime:           0,
+					HurtTime:            0,
+					SleepTimer:          0,
+					SeenCredits:         0,
+					PlayerGameType:      1,
+					FoodLevel:           20,
+					FoodExhaustionLevel: 0,
+					FoodSaturationLevel: 5,
+					FoodTickTimer:       0,
+					/*RecipeBook: PlayerDataRecipeBook{
+						IsBlastingFurnaceFilteringCraftable: 0,
+						IsBlastingFurnaceGuiOpen:            0,
+						IsFilteringCraftable:                0,
+						IsFurnaceFilteringCraftable:         0,
+						IsFurnaceGuiOpen:                    0,
+						IsGuiOpen:                           0,
+						IsSmokerFilteringCraftables:         0,
+						IsSmokerGuiOpen:                     0,
+						Recipes: []interface{}{
+							"minecraft:crafting_table",
+						},
+						ToBeDisplayed: []interface{}{
+							"minecraft:crafting_table",
+						},
+					},*/
+				}
+				server.WritePlayerData(idString, *data)
+			}
 			conn.WritePacket(pk.Marshal(
 				packetid.ClientboundLogin,
 				pk.Int(server.NewEntityID()),
@@ -236,8 +293,8 @@ func HandleTCPRequest(conn net.Conn) {
 				pk.Byte(-1),
 				pk.Array(dimensions),
 				pk.NBT(getNetworkRegistry(Protocol)),
-				pk.Identifier("minecraft:overworld"),
-				pk.Identifier(dimensions[0]),
+				pk.Identifier(data.Dimension),
+				pk.Identifier(data.Dimension),
 				pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
 				pk.VarInt(server.Config.MaxPlayers),
 				pk.VarInt(server.Config.ViewDistance),
@@ -247,6 +304,15 @@ func HandleTCPRequest(conn net.Conn) {
 				pk.Boolean(false),
 				pk.Boolean(false),
 				pk.Boolean(false),
+			))
+			conn.WritePacket(pk.Marshal(packetid.ClientboundPlayerPosition,
+				pk.Double(data.Pos[0]),     //x
+				pk.Double(data.Pos[1]),     //y
+				pk.Double(data.Pos[2]),     //z
+				pk.Float(data.Rotation[0]), //yaw
+				pk.Float(data.Rotation[1]), //pitch
+				pk.Byte(0),
+				pk.VarInt(server.NewTeleportID()),
 			))
 			conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 				pk.Position{X: int(server.Level.Data.SpawnX), Y: int(server.Level.Data.SpawnY), Z: int(server.Level.Data.SpawnZ)},
@@ -261,16 +327,17 @@ func HandleTCPRequest(conn net.Conn) {
 				Connection:   &conn,
 				Properties:   properties,
 				IP:           ip,
-				World:        string(dimensions[0]),
-				LoadedChunks: make(map[[2]int32]*LoadedChunk),
+				LoadedChunks: make(map[[2]int32]struct{}),
+				Data:         *data,
 			}
 			joined := false
 			for {
 				var packet pk.Packet
 				err := conn.ReadPacket(&packet)
 				if err != nil {
-					for _, chunk := range player.LoadedChunks {
-						chunk.RemoveViewer(player.UUID.String)
+					for pos := range player.LoadedChunks {
+						//server.Worlds[player.Data["Dimension"].(string)].
+						server.Worlds[player.Data.Dimension].Chunks[pos].RemoveViewer(player.UUID.String)
 					}
 					server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
 					server.Events.Emit("PlayerLeave", player)
@@ -350,18 +417,6 @@ func HandleTCPRequest(conn net.Conn) {
 						packet.Scan(&channel, &data)
 						if channel == "minecraft:brand" {
 							player.Client.Brand = data
-						}
-					}
-				case packetid.LoginDisconnect:
-					{
-						var reason pk.VarInt
-						packet.Scan(&reason)
-						fmt.Println(reason)
-						if reason == 0 {
-							server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
-							conn.Close()
-							server.Events.Emit("PlayerLeave", player)
-							return
 						}
 					}
 				}
