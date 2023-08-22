@@ -357,12 +357,10 @@ func HandleTCPRequest(conn net.Conn) {
 						if joined {
 							continue
 						}
-						server.Lock()
 						server.Players[idString] = player
 						joined = true
 						server.PlayerNames[fmt.Sprint(name)] = idString
 						server.PlayerIDs = append(server.PlayerIDs, idString)
-						server.Unlock()
 						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 						server.Events.Emit("PlayerJoin", player, conn)
 						ticker := time.NewTicker(10 * time.Second)

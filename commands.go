@@ -103,6 +103,8 @@ func (server *Server) Command(executor string, content string) chat.Message {
 				return chat.Text(fmt.Sprintf("§c%s is already a server operator", op.Name))
 			}
 			player := PlayerBase{}
+			server.Lock()
+			defer server.Unlock()
 			if _, err := uuid.Parse(id); err == nil { // is uuid
 				player.UUID = id
 				if server.Players[id].UUID.String == id {
@@ -168,6 +170,8 @@ func (server *Server) Command(executor string, content string) chat.Message {
 			case "spectator":
 				mode = 3
 			}
+			server.Lock()
+			defer server.Unlock()
 			if server.PlayerNames[id] == "" {
 				if server.Players[id].UUID.String != id {
 					return chat.Text("§cUnknown player")

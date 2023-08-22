@@ -23,6 +23,8 @@ func (world World) Tick(n uint) {
 }
 
 func (world World) SubtickChunkLoad(tick uint) {
+	world.Lock()
+	defer world.Unlock()
 	for _, p := range server.Players {
 		if p.Data.Dimension != world.Name {
 			continue
@@ -43,7 +45,6 @@ LoadChunk:
 		}
 		player.CalculateLoadingQueue()
 		for _, pos := range player.LoadQueue {
-			//fmt.Println("loading chunk", pos)
 			if _, ok := world.Chunks[pos]; !ok {
 				if !world.LoadChunk(pos) {
 					break LoadChunk
@@ -60,7 +61,6 @@ LoadChunk:
 	for _, player := range server.Players {
 		player.CalculateUnusedChunks()
 		for _, pos := range player.UnloadQueue {
-			//fmt.Println("unloading chunk", pos)
 			delete(player.LoadedChunks, pos)
 			world.Chunks[pos].RemoveViewer(player.UUID.String)
 			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))

@@ -112,31 +112,33 @@ func distance2i(pos [2]int32) float64 {
 	return math.Sqrt(float64(pos[0]*pos[0]) + float64(pos[1]*pos[1]))
 }
 func (w *World) LoadChunk(pos [2]int32) bool {
-	c := server.GetChunk(pos)
+	c := w.GetChunk(pos)
 	if c == nil {
 		c = level.EmptyChunk(24)
 		c.Status = level.StatusFull
 	}
-	w.Lock()
 	w.Chunks[pos] = &LoadedChunk{Chunk: c}
-	w.Unlock()
 	return true
 }
 
 func (w *World) UnloadChunk(pos [2]int32) {
+	server.Lock()
+	w.Lock()
+	defer server.Lock()
+	defer w.Lock()
 	for _, player := range server.Players {
 		if player.Data.Dimension != w.Name {
 			continue
 		}
 		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))
 	}
-	w.Lock()
 	delete(w.Chunks, pos)
-	w.Unlock()
 }
 
 func (server Server) PlayersAsBase() []PlayerBase {
 	players := make([]PlayerBase, 0)
+	server.Lock()
+	defer server.Unlock()
 	for _, player := range server.Players {
 		players = append(players, PlayerBase{
 			UUID: player.UUID.String,
@@ -300,6 +302,8 @@ func (emitter Events) RemoveAllListeners(key string) {
 	delete(emitter._Events, key)
 }
 func (server Server) IsOP(id string) (bool, PlayerBase) {
+	server.Lock()
+	defer server.Unlock()
 	for _, op := range server.OPs {
 		if op.UUID == id || op.Name == id {
 			return true, op
@@ -331,9 +335,7 @@ func (server *Server) ParseWorldData() {
 		server.Logger.Error("Failed to parse world data")
 		os.Exit(1)
 	}
-	server.Lock()
 	server.Worlds["minecraft:overworld"] = World{Name: "minecraft:overworld", Chunks: make(map[[2]int32]*LoadedChunk), Mutex: &sync.Mutex{}}
-	server.Unlock()
 	InitLoader()
 	go server.Worlds["minecraft:overworld"].TickLoop()
 	server.Logger.Debug("Parsed world data")
@@ -349,7 +351,7 @@ func (server *Server) NewTeleportID() int {
 	return server.TeleportCounter
 }
 
-func (server Server) GetChunk(pos [2]int32) *level.Chunk {
+func (world World) GetChunk(pos [2]int32) *level.Chunk {
 	rx, rz := region.At(int(pos[0]), int(pos[1]))
 	filename := fmt.Sprintf("world/region/r.%d.%d.mca", rx, rz)
 	r, err := region.Open(filename)
@@ -379,13 +381,11 @@ func (server Server) GetChunk(pos [2]int32) *level.Chunk {
 
 func (server *Server) Init() {
 	server.Mutex = &sync.Mutex{}
-	server.Lock()
 	server.Whitelist = LoadPlayerList("whitelist.json")
 	server.OPs = LoadPlayerList("ops.json")
 	server.BannedPlayers = LoadPlayerList("banned_players.json")
 	server.BannedIPs = LoadIPBans()
 	server.Worlds = make(map[string]World)
-	server.Unlock()
 	server.LoadAllPlugins()
 	os.MkdirAll("permissions/groups", 0755)
 	os.MkdirAll("permissions/players", 0755)
@@ -415,9 +415,7 @@ func (server *Server) GetFavicon() (bool, int, []byte) {
 				return false, 2, data
 			}
 		}
-		server.Lock()
 		server.Favicon = data
-		server.Unlock()
 	} else {
 		data = server.Favicon
 	}
@@ -425,6 +423,8 @@ func (server *Server) GetFavicon() (bool, int, []byte) {
 }
 
 func (server Server) BroadcastMessage(message chat.Message) {
+	server.Lock()
+	defer server.Unlock()
 	server.Logger.Print(message.String())
 	for _, player := range server.Players {
 		server.Message(player.UUID.String, message)
@@ -488,6 +488,8 @@ func (server Server) LoadPlugin(fileName string) {
 }
 
 func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message) {
+	server.Lock()
+	defer server.Unlock()
 	server.Logger.Print(message.String())
 	op := LoadPlayerList("ops.json")
 	ops := make(map[string]PlayerBase)
@@ -507,12 +509,16 @@ func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message
 }
 
 func (server Server) BroadcastPacket(packet pk.Packet) {
+	server.Lock()
+	defer server.Unlock()
 	for _, player := range server.Players {
 		player.Connection.WritePacket(packet)
 	}
 }
 
 func (server Server) Message(id string, message chat.Message) {
+	server.Lock()
+	defer server.Unlock()
 	player := server.Players[id]
 	if player.UUID.String != id {
 		return
