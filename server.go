@@ -254,15 +254,6 @@ func (graph CommandGraph) WriteTo(w io.Writer) (int64, error) {
 			if !isCommand && !isArg {
 				continue
 			}
-			//var isNextArg bool
-			/*if len(nodes) <= i+1 {
-				isNextArg = false
-			} else {
-				_, isNextArg = nodes[i+1].Data.(Argument)
-			}*/
-			/*if _, ok := parent.Data.(Command); ok && isNextArg {
-				nodes[i+1].Parent = node.Parent
-			}*/
 			parent.Children = append(parent.Children, len(entries))
 			if isCommand {
 				entries[parent.EntryIndex] = pk.Tuple{

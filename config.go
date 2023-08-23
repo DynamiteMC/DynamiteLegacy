@@ -64,14 +64,14 @@ type Config struct {
 func LoadConfig() *Config {
 	config := &Config{}
 
-	file, err := os.Open("gocraft.yml")
+	file, err := os.Open("config.yml")
 	if err != nil {
 		file.Close()
 		config = &Config{
-			ServerName: "GoCraft",
+			ServerName: "DynamiteMC",
 			ServerIP:   "0.0.0.0",
 			ServerPort: 25565,
-			MOTD:       "A GoCraft Minecraft Server",
+			MOTD:       "A DynamiteMC Minecraft Server",
 			Whitelist: Whitelist{
 				Enforce: false,
 				Enable:  false,
@@ -111,7 +111,7 @@ func LoadConfig() *Config {
 				Enable: true,
 			},
 		}
-		file, _ := os.Create("gocraft.yml")
+		file, _ := os.Create("config.yml")
 		e := yaml.NewEncoder(file)
 		e.Encode(&config)
 		return config
