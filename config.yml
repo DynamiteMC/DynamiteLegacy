@@ -1,9 +1,9 @@
-server_name: DynamiteMC
+server_name: Dynamite
 server_ip: 0.0.0.0
 server_port: 25565
 view_distance: 16
 simulation_distance: 16
-motd: A DynamiteMC Minecraft Server
+motd: A Dynamite Minecraft Server
 icon:
   path: server-icon.png
   enable: true
@@ -15,10 +15,7 @@ hardcore: false
 max_players: 20
 online_mode: false
 tablist:
-  header: 
-  - "§b§lDynamiteMC Server"
-  - "§7Your username§8: §f%player%"
-  - "§7Your rank: §f%player_group%"
+  header: []
   footer: []
 chat:
   format: '%player_prefix%§7%player%§8: §f%message%'
