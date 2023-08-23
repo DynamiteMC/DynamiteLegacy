@@ -20,7 +20,7 @@ func OnPlayerJoin(params ...interface{}) {
 	player := params[0].(*Player)
 	connection := params[1].(net.Conn)
 	header, footer := server.Playerlist.GetTexts(player)
-	connection.WritePacket(pk.Marshal(0x17, pk.Identifier("minecraft:brand"), pk.String("DynamiteMC")))
+	connection.WritePacket(pk.Marshal(0x17, pk.Identifier("minecraft:brand"), pk.String("Dynamite")))
 	connection.WritePacket(pk.Marshal(packetid.ClientboundTabList, chat.Text(header), chat.Text(footer)))
 	fields := []pk.FieldEncoder{
 		chat.Text(server.Config.MOTD),

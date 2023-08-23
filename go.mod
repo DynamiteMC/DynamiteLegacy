@@ -1,4 +1,4 @@
-module gocraft
+module dynamite
 
 go 1.20
 

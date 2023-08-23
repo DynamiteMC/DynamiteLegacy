@@ -1,8 +1,8 @@
 package main
 
 import (
+	"dynamite/logger"
 	"errors"
-	"gocraft/logger"
 	"sync"
 
 	"github.com/Tnze/go-mc/level"

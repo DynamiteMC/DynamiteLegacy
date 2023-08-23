@@ -17,8 +17,8 @@ var playerContainer *widget.List
 
 func LaunchGUI() fyne.Window {
 	app := app.New()
-	window := app.NewWindow("GoCraft Server")
-	title := widget.NewRichTextFromMarkdown("# GoCraft Server")
+	window := app.NewWindow("Dynamite Server")
+	title := widget.NewRichTextFromMarkdown("# Dynamite Server")
 	consoleTitle := widget.NewRichTextFromMarkdown("## Console")
 	server.Logger.GUIConsole = widget.NewTextGridFromString(strings.Join(server.Logger.ConsoleText, "\n"))
 	command := widget.NewEntry()

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"dynamite/logger"
 	"embed"
 	"fmt"
-	"gocraft/logger"
 	"os"
 	"os/signal"
 	"time"

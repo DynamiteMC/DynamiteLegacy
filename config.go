@@ -68,10 +68,10 @@ func LoadConfig() *Config {
 	if err != nil {
 		file.Close()
 		config = &Config{
-			ServerName: "DynamiteMC",
+			ServerName: "Dynamite",
 			ServerIP:   "0.0.0.0",
 			ServerPort: 25565,
-			MOTD:       "A DynamiteMC Minecraft Server",
+			MOTD:       "A Dynamite Minecraft Server",
 			Whitelist: Whitelist{
 				Enforce: false,
 				Enable:  false,
