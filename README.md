@@ -21,6 +21,7 @@ Feel free to contribute by making an issue or pull request
     - [x] /gamemode
     - [x] /stop
     - [x] /reload
+    - [x] /tp
 - [ ] Entities
 - [ ] Particles
 - [ ] Inventory

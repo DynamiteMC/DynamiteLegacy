@@ -77,7 +77,7 @@ const (
 	PROTOCOL_1_7    = 3
 )
 
-func getNetworkRegistry(protocol pk.VarInt) (reg registry.NetworkCodec) {
+func getNetworkRegistry() (reg registry.NetworkCodec) {
 	data, _ := registries.ReadFile("registry.nbt")
 	nbt.Unmarshal(data, &reg)
 	return
@@ -156,25 +156,27 @@ func HandleTCPRequest(conn net.Conn) {
 			var id pk.UUID
 			var idString string
 			properties := []user.Property{}
-			if server.Config.Online {
-				d := MojangLoginHandler{}
-				var serverKey *rsa.PrivateKey
-				serverKey, err = d.getPrivateKey()
-				if err != nil {
+			d := MojangLoginHandler{}
+			var serverKey *rsa.PrivateKey
+			serverKey, err = d.getPrivateKey()
+			if err != nil {
+				return
+			}
+			var resp *auth.Resp
+			resp, err = auth.Encrypt(&conn, fmt.Sprint(name), serverKey)
+			if err != nil {
+				if server.Config.Online {
+					conn.WritePacket(pk.Marshal(packetid.LoginDisconnect, chat.Text(server.Config.Messages.OnlineMode)))
 					return
+				} else {
+					id = pk.UUID(offline.NameToUUID(string(name)))
+					idString = fmt.Sprint(offline.NameToUUID(string(name)))
 				}
-				var resp *auth.Resp
-				resp, err = auth.Encrypt(&conn, fmt.Sprint(name), serverKey)
-				if err != nil {
-					return
-				}
+			} else {
 				name = pk.String(resp.Name)
 				idString = fmt.Sprint(resp.ID)
 				id = pk.UUID(resp.ID)
 				properties = resp.Properties
-			} else {
-				id = pk.UUID(offline.NameToUUID(string(name)))
-				idString = fmt.Sprint(offline.NameToUUID(string(name)))
 			}
 			server.Logger.Info("[%s] Player %s (%s) is attempting to join", ip, name, idString)
 			valid := ValidatePlayer(fmt.Sprint(name), idString, strings.Split(ip, ":")[0])
@@ -239,7 +241,7 @@ func HandleTCPRequest(conn net.Conn) {
 					Score:            0,
 					SelectedItemSlot: 0,
 					EnderItems:       []interface{}{},
-					Inventory:        []interface{}{},
+					Inventory:        []InventorySlot{},
 					Pos: []float64{
 						float64(server.Level.Data.SpawnX),
 						float64(server.Level.Data.SpawnY),
@@ -266,7 +268,7 @@ func HandleTCPRequest(conn net.Conn) {
 					FoodExhaustionLevel: 0,
 					FoodSaturationLevel: 5,
 					FoodTickTimer:       0,
-					/*RecipeBook: PlayerDataRecipeBook{
+					RecipeBook: PlayerDataRecipeBook{
 						IsBlastingFurnaceFilteringCraftable: 0,
 						IsBlastingFurnaceGuiOpen:            0,
 						IsFilteringCraftable:                0,
@@ -275,25 +277,22 @@ func HandleTCPRequest(conn net.Conn) {
 						IsGuiOpen:                           0,
 						IsSmokerFilteringCraftables:         0,
 						IsSmokerGuiOpen:                     0,
-						Recipes: []interface{}{
-							"minecraft:crafting_table",
-						},
-						ToBeDisplayed: []interface{}{
-							"minecraft:crafting_table",
-						},
-					},*/
+						Recipes:                             []interface{}{},
+						ToBeDisplayed:                       []interface{}{},
+					},
 				}
 				server.WritePlayerData(idString, *data)
 			}
+			entityId := server.NewEntityID()
 			conn.WritePacket(pk.Marshal(
 				packetid.ClientboundLogin,
-				pk.Int(server.NewEntityID()),
+				pk.Int(entityId),
 				pk.Boolean(server.Config.Hardcore),
 				pk.UnsignedByte(gamemode),
 				pk.Byte(-1),
 				pk.Array(dimensions),
-				pk.NBT(getNetworkRegistry(Protocol)),
-				pk.Identifier(data.Dimension),
+				pk.NBT(getNetworkRegistry()),
+				pk.Identifier("minecraft:overworld"),
 				pk.Identifier(data.Dimension),
 				pk.Long(binary.BigEndian.Uint64(hashedSeed[:8])),
 				pk.VarInt(server.Config.MaxPlayers),
@@ -317,6 +316,13 @@ func HandleTCPRequest(conn net.Conn) {
 			conn.WritePacket(pk.Marshal(packetid.ClientboundSetDefaultSpawnPosition,
 				pk.Position{X: int(server.Level.Data.SpawnX), Y: int(server.Level.Data.SpawnY), Z: int(server.Level.Data.SpawnZ)},
 				pk.Float(0)))
+			if len(data.Inventory) > 0 {
+				conn.WritePacket(pk.Marshal(packetid.ClientboundContainerSetContent,
+					pk.UnsignedByte(0),
+					pk.VarInt(0),
+					data,
+				))
+			}
 			var lastKeepAliveId int
 			player := &Player{
 				Name: fmt.Sprint(name),
@@ -329,15 +335,19 @@ func HandleTCPRequest(conn net.Conn) {
 				IP:           ip,
 				LoadedChunks: make(map[[2]int32]struct{}),
 				Data:         *data,
+				EntityID:     entityId,
+				OldPosition:  [3]int32{-1, -1, -1},
 			}
 			joined := false
 			for {
 				var packet pk.Packet
 				err := conn.ReadPacket(&packet)
 				if err != nil {
+					server.Worlds[player.Data.Dimension].TickLock.Lock()
 					for pos := range player.LoadedChunks {
 						server.Worlds[player.Data.Dimension].Chunks[pos].RemoveViewer(player.UUID.String)
 					}
+					server.Worlds[player.Data.Dimension].TickLock.Unlock()
 					server.Logger.Info("[%s] Player %s (%s) disconnected", ip, name, idString)
 					server.Events.Emit("PlayerLeave", player)
 					return
@@ -357,13 +367,16 @@ func HandleTCPRequest(conn net.Conn) {
 						if joined {
 							continue
 						}
-						server.Players[idString] = player
+						server.Players.Lock()
+						server.Players.Players[idString] = player
+						server.Players.PlayerNames[fmt.Sprint(name)] = idString
+						server.Players.PlayerIDs = append(server.Players.PlayerIDs, idString)
+						server.Players.Unlock()
 						joined = true
-						server.PlayerNames[fmt.Sprint(name)] = idString
-						server.PlayerIDs = append(server.PlayerIDs, idString)
+
 						server.Logger.Info("[%s] Player %s (%s) joined the server", ip, name, idString)
 						server.Events.Emit("PlayerJoin", player, conn)
-						ticker := time.NewTicker(10 * time.Second)
+						ticker := time.NewTicker(15 * time.Second)
 						defer ticker.Stop()
 						go func() {
 							for range ticker.C {
@@ -399,13 +412,40 @@ func HandleTCPRequest(conn net.Conn) {
 							z pk.Double
 						)
 						packet.Scan(&x, &y, &z)
+						if player.Position == [3]int32{int32(x), int32(y), int32(z)} {
+							continue
+						}
+						player.OldPosition = player.Position
 						player.Position = [3]int32{int32(x), int32(y), int32(z)}
+					}
+				case int32(packetid.ServerboundMovePlayerPosRot):
+					{
+						var (
+							x     pk.Double
+							y     pk.Double
+							z     pk.Double
+							yaw   pk.Float
+							pitch pk.Float
+						)
+						packet.Scan(&x, &y, &z, &yaw, &pitch)
+						if player.Position == [3]int32{int32(x), int32(y), int32(z)} {
+							continue
+						}
+						player.OldPosition = player.Position
+						player.Position = [3]int32{int32(x), int32(y), int32(z)}
+					}
+				case int32(packetid.ServerboundMovePlayerRot):
+					{
+						var (
+							yaw   pk.Float
+							pitch pk.Float
+						)
+						packet.Scan(&yaw, &pitch)
+						player.Rotation = [2]float32{float32(yaw), float32(pitch)}
 					}
 				case int32(packetid.ServerboundChat):
 					{
-						var content pk.String
-						packet.Scan(&content)
-						server.Events.Emit("PlayerChatMessage", player, content)
+						server.Events.Emit("PlayerChatMessage", player, packet)
 					}
 				case 0x0D:
 					{
@@ -433,8 +473,9 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 			server.Logger.Debug("[TCP] ([%s] -> Server) Sent StatusRequest packet", ip)
 			max := server.Config.MaxPlayers
 			if max == -1 {
-				max = len(server.Players) + 1
+				max = len(server.Players.Players) + 1
 			}
+			players := server.Players.AsBase()
 			response := StatusResponse{
 				Version: Version{
 					Name:     "GoCraft 1.19.4",
@@ -442,8 +483,8 @@ func handleTCPPing(conn net.Conn, Protocol pk.VarInt, ip string) {
 				},
 				Players: Players{
 					Max:    max,
-					Online: len(server.Players),
-					Sample: server.PlayersAsBase(),
+					Online: len(players),
+					Sample: players,
 				},
 				Description: Description{
 					Text: server.Config.MOTD,

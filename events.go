@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Tnze/go-mc/chat"
 	"github.com/Tnze/go-mc/data/packetid"
@@ -43,7 +42,7 @@ func OnPlayerJoin(params ...interface{}) {
 		max = "Unlimited"
 	}
 	if playerCountText != nil && playerContainer != nil {
-		playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+		playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players.Players), max))
 		playerContainer.Refresh()
 	}
 
@@ -51,26 +50,49 @@ func OnPlayerJoin(params ...interface{}) {
 
 	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerJoin, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 	server.Playerlist.AddPlayer(player)
+	server.BroadcastPacketExcept(pk.Marshal(packetid.ClientboundAddPlayer,
+		pk.VarInt(player.EntityID),
+		player.UUID.Binary,
+		pk.Double(player.Position[0]),
+		pk.Double(player.Position[1]),
+		pk.Double(player.Position[2]),
+		pk.Angle(player.Rotation[0]),
+		pk.Angle(player.Rotation[1]),
+	), player.UUID.String)
+	server.Players.Lock()
+	for _, p := range server.Players.Players {
+		if p.UUID == player.UUID {
+			continue
+		}
+		connection.WritePacket(pk.Marshal(packetid.ClientboundAddPlayer,
+			pk.VarInt(p.EntityID),
+			p.UUID.Binary,
+			pk.Double(p.Position[0]),
+			pk.Double(p.Position[1]),
+			pk.Double(p.Position[2]),
+			pk.Angle(p.Rotation[0]),
+			pk.Angle(p.Rotation[1]),
+		))
+	}
+	server.Players.Unlock()
 }
 
 func OnPlayerLeave(params ...interface{}) {
 	player := params[0].(*Player)
-	delete(server.Players, player.UUID.String)
-	delete(server.PlayerNames, player.Name)
-
+	delete(server.Players.Players, player.UUID.String)
+	delete(server.Players.PlayerNames, player.Name)
 	max := fmt.Sprint(server.Config.MaxPlayers)
+	group, prefix, suffix := server.GetGroup(player.UUID.String)
+	message := server.Config.Messages.PlayerLeave
 	if max == "-1" {
 		max = "Unlimited"
 	}
 	if playerCountText != nil && playerContainer != nil {
-		playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+		playerCountText.ParseMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players.Players), max))
 		playerContainer.Refresh()
 	}
-
-	group, prefix, suffix := server.GetGroup(player.UUID.String)
-
-	server.BroadcastMessage(chat.Text(ParsePlaceholders(server.Config.Messages.PlayerLeave, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 	server.Playerlist.RemovePlayer(player)
+	server.BroadcastMessage(chat.Text(ParsePlaceholders(message, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, PlayerGroup: group})))
 }
 
 func OnPlayerChatMessage(params ...interface{}) {
@@ -81,15 +103,8 @@ func OnPlayerChatMessage(params ...interface{}) {
 	if !server.HasPermissions(player.UUID.String, []string{"server.chat"}) {
 		return
 	}
-	content := params[1].(pk.String)
-
-	group, prefix, suffix := server.GetGroup(player.UUID.String)
-
-	data := ParsePlaceholders(server.Config.Chat.Format, Placeholders{PlayerName: player.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, Message: fmt.Sprint(content), PlayerGroup: group})
-	if server.Config.Chat.Colors && server.HasPermissions(player.UUID.String, []string{"server.chat.colors"}) {
-		data = strings.ReplaceAll(data, "&", "§")
-	}
-	server.BroadcastMessage(chat.Text(data))
+	packet := params[1].(pk.Packet)
+	server.BroadcastPlayerMessage(player, packet)
 }
 
 func OnPlayerCommand(params ...interface{}) {

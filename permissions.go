@@ -65,8 +65,8 @@ func (server Server) HasPermissions(playerId string, perms []string) bool {
 	if len(perms) == 0 {
 		return true
 	}
-	for i := 0; i < len(server.OPs); i++ {
-		if server.OPs[i].UUID == playerId {
+	for i := 0; i < len(server.Players.OPs); i++ {
+		if server.Players.OPs[i].UUID == playerId {
 			return true
 		}
 	}

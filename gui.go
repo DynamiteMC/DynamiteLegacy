@@ -19,7 +19,6 @@ func LaunchGUI() fyne.Window {
 	app := app.New()
 	window := app.NewWindow("GoCraft Server")
 	title := widget.NewRichTextFromMarkdown("# GoCraft Server")
-
 	consoleTitle := widget.NewRichTextFromMarkdown("## Console")
 	server.Logger.GUIConsole = widget.NewTextGridFromString(strings.Join(server.Logger.ConsoleText, "\n"))
 	command := widget.NewEntry()
@@ -35,17 +34,17 @@ func LaunchGUI() fyne.Window {
 	if max == "-1" {
 		max = "Unlimited"
 	}
-	playerCountText = widget.NewRichTextFromMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players), max))
+	playerCountText = widget.NewRichTextFromMarkdown(fmt.Sprintf("### %d/%s players", len(server.Players.Players), max))
 	playerContainer = widget.NewList(
 		func() int {
-			return len(server.Players)
+			return len(server.Players.Players)
 		},
 		func() fyne.CanvasObject {
 			return container.NewHBox()
 		},
 		func(i widget.ListItemID, o fyne.CanvasObject) {
 			cont := o.(*fyne.Container)
-			player := server.Players[server.PlayerIDs[i]]
+			player := server.Players.Players[server.Players.PlayerIDs[i]]
 			if len(cont.Objects) == 0 {
 				res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID.String))
 				skinData, _ := io.ReadAll(res.Body)
@@ -55,7 +54,7 @@ func LaunchGUI() fyne.Window {
 				cont.Refresh()
 			}
 		})
-	/*for _, player := range server.Players {
+	/*for _, player := range server.Players.Players {
 		res, _ := http.Get(fmt.Sprintf("https://crafatar.com/avatars/%s", player.UUID))
 		skinData, _ := io.ReadAll(res.Body)
 		skin := widget.NewIcon(fyne.NewStaticResource("skin", skinData))
@@ -64,7 +63,6 @@ func LaunchGUI() fyne.Window {
 		playerContainer.Add(cont)
 	}*/
 	players := container.NewBorder(container.NewVBox(playersTitle, playerCountText), nil, nil, nil, playerContainer)
-
 	sp := container.NewHSplit(console, players)
 	sp.SetOffset(0.6)
 	window.SetContent(container.NewBorder(title, nil, nil, nil, sp))

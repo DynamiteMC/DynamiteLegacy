@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Tnze/go-mc/chat"
@@ -18,24 +19,24 @@ func Reload() chat.Message {
 	playerCache = make(map[string]PlayerPermissions)
 	groupCache = make(map[string]GroupPermissions)
 	server.Config = LoadConfig()
-	server.Whitelist = LoadPlayerList("whitelist.json")
-	server.OPs = LoadPlayerList("ops.json")
-	server.BannedPlayers = LoadPlayerList("banned_players.json")
-	server.BannedIPs = LoadIPBans()
+	server.Players.Whitelist = LoadPlayerList("whitelist.json")
+	server.Players.OPs = LoadPlayerList("ops.json")
+	server.Players.BannedPlayers = LoadPlayerList("banned_players.json")
+	server.Players.BannedIPs = LoadIPBans()
 	server.Favicon = []byte{}
 	if server.Config.Whitelist.Enable && server.Config.Whitelist.Enforce {
 		wmap := make(map[string]bool)
-		for _, p := range server.Whitelist {
+		for _, p := range server.Players.Whitelist {
 			wmap[p.UUID] = true
 		}
-		for i := 0; i < len(server.Players) && !wmap[server.PlayerIDs[i]]; i++ {
-			player := server.Players[server.PlayerIDs[i]]
+		for i := 0; i < len(server.Players.Players) && !wmap[server.Players.PlayerIDs[i]]; i++ {
+			player := server.Players.Players[server.Players.PlayerIDs[i]]
 			player.Connection.WritePacket(pk.Marshal(packetid.ClientboundDisconnect, chat.Text(server.Config.Messages.NotInWhitelist)))
 			player.Connection.Close()
 			server.Events.Emit("PlayerLeave", player)
 		}
 	}
-	for _, player := range server.Players {
+	for _, player := range server.Players.Players {
 		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{player.UUID.String}))
 	}
 	return chat.Text(server.Config.Messages.ReloadComplete)
@@ -62,10 +63,12 @@ func GetArgument(args []string, index int) string {
 
 func (server *Server) Command(executor string, content string) chat.Message {
 	var executorName string
+	var executorPlayer *Player
 	if executor == "console" {
 		executorName = "Console"
 	} else {
-		executorName = server.Players[executor].Name
+		executorName = server.Players.Players[executor].Name
+		executorPlayer = server.Players.Players[executor]
 	}
 	content = strings.TrimSpace(content)
 	args := strings.Split(content, " ")
@@ -84,9 +87,19 @@ func (server *Server) Command(executor string, content string) chat.Message {
 	case "stop":
 		{
 			go func() {
-				for _, player := range server.Players {
+				server.Logger.Info("Saving world")
+				server.Players.Lock()
+				for _, player := range server.Players.Players {
 					player.Connection.WritePacket(pk.Marshal(packetid.ClientboundDisconnect, chat.Text(server.Config.Messages.ServerClosed)))
 					player.Connection.Close()
+					player.Data.Save(player.UUID.String)
+				}
+				for _, world := range server.Worlds {
+					world.TickLock.Lock()
+					for pos, chunk := range world.Chunks {
+						chunk.Lock()
+						world.UnloadChunk(pos)
+					}
 				}
 				os.Exit(0)
 			}()
@@ -98,17 +111,15 @@ func (server *Server) Command(executor string, content string) chat.Message {
 			if id == "" {
 				return chat.Text("§cPlease specify a player to op")
 			}
-			isOp, op := server.IsOP(id)
+			isOp, op := server.Players.IsOP(id)
 			if isOp {
 				return chat.Text(fmt.Sprintf("§c%s is already a server operator", op.Name))
 			}
 			player := PlayerBase{}
-			server.Lock()
-			defer server.Unlock()
 			if _, err := uuid.Parse(id); err == nil { // is uuid
 				player.UUID = id
-				if server.Players[id].UUID.String == id {
-					player.Name = server.Players[id].Name
+				if server.Players.Players[id].UUID.String == id {
+					player.Name = server.Players.Players[id].Name
 				} else {
 					exists, p := server.Mojang.FetchUUID(id)
 					if !exists {
@@ -122,8 +133,8 @@ func (server *Server) Command(executor string, content string) chat.Message {
 				}
 			} else {
 				player.Name = id
-				if server.PlayerNames[id] != "" {
-					player.UUID = server.PlayerNames[id]
+				if server.Players.PlayerNames[id] != "" {
+					player.UUID = server.Players.PlayerNames[id]
 				} else {
 					exists, p := server.Mojang.FetchUsername(id)
 					if !exists {
@@ -137,9 +148,9 @@ func (server *Server) Command(executor string, content string) chat.Message {
 					}
 				}
 			}
-			server.OPs = WritePlayerList("ops.json", player)
-			if server.Players[player.UUID] != nil {
-				server.Players[player.UUID].Connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{player.UUID}))
+			server.Players.OPs = WritePlayerList("ops.json", player)
+			if server.Players.Players[player.UUID] != nil {
+				server.Players.Players[player.UUID].Connection.WritePacket(pk.Marshal(packetid.ClientboundCommands, CommandGraph{player.UUID}))
 			}
 			server.BroadcastMessageAdmin(executor, chat.Text(fmt.Sprintf("§7[%s: Made %s a server operator]", executorName, player.Name)))
 			return chat.Text(fmt.Sprintf("Made %s a server operator", player.Name))
@@ -170,16 +181,14 @@ func (server *Server) Command(executor string, content string) chat.Message {
 			case "spectator":
 				mode = 3
 			}
-			server.Lock()
-			defer server.Unlock()
-			if server.PlayerNames[id] == "" {
-				if server.Players[id].UUID.String != id {
+			if server.Players.PlayerNames[id] == "" {
+				if server.Players.Players[id].UUID.String != id {
 					return chat.Text("§cUnknown player")
 				} else {
-					player = server.Players[id]
+					player = server.Players.Players[id]
 				}
 			} else {
-				player = server.Players[server.PlayerNames[id]]
+				player = server.Players.Players[server.Players.PlayerNames[id]]
 			}
 			player.Connection.WritePacket(pk.Marshal(
 				packetid.ClientboundGameEvent,
@@ -196,15 +205,121 @@ func (server *Server) Command(executor string, content string) chat.Message {
 	case "ram":
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
-		return chat.Text(fmt.Sprintf("Allocated: %v MiB, TotalAllocated: %v MiB", bToMb(m.Alloc), bToMb(m.TotalAlloc)))
+		return chat.Text(fmt.Sprintf("Allocated: %v MiB, Total Allocated: %v MiB", bToMb(m.Alloc), bToMb(m.TotalAlloc)))
 	case "teleport", "tp":
 		{
-			fmt.Println(content)
-			return chat.Text("h")
+			switch len(args) {
+			case 1:
+				{
+					if executor == "console" {
+						return chat.Text("§cOnly players can be teleported")
+					}
+					is, target := ParseTarget(executorPlayer, args[0])
+					if !is {
+						return chat.Text("§cUnknown player at argument 0")
+					}
+					executorPlayer.Connection.WritePacket(pk.Marshal(packetid.ClientboundPlayerPosition,
+						pk.Double(target.Position[0]),        //x
+						pk.Double(target.Position[1]),        //y
+						pk.Double(target.Position[2]),        //z
+						pk.Float(executorPlayer.Rotation[0]), //yaw
+						pk.Float(executorPlayer.Rotation[1]), //pitch
+						pk.Byte(0),
+						pk.VarInt(server.NewTeleportID()),
+					))
+					return chat.Text(fmt.Sprintf("Teleported you to %s", target.Name))
+				}
+			case 2:
+				{
+					is, player := ParseTarget(executorPlayer, args[0])
+					if !is {
+						return chat.Text("§cUnknown player at argument 0")
+					}
+					is, target := ParseTarget(executorPlayer, args[1])
+					if !is {
+						return chat.Text("§cUnknown player at argument 1")
+					}
+					player.Connection.WritePacket(pk.Marshal(packetid.ClientboundPlayerPosition,
+						pk.Double(target.Position[0]), //x
+						pk.Double(target.Position[1]), //y
+						pk.Double(target.Position[2]), //z
+						pk.Float(player.Rotation[0]),  //yaw
+						pk.Float(player.Rotation[1]),  //pitch
+						pk.Byte(0),
+						pk.VarInt(server.NewTeleportID()),
+					))
+					return chat.Text(fmt.Sprintf("Teleported %s to %s", player.Name, target.Name))
+				}
+			case 3:
+				{
+					x, xerr := strconv.ParseFloat(args[0], 64)
+					y, yerr := strconv.ParseFloat(args[1], 64)
+					z, zerr := strconv.ParseFloat(args[2], 64)
+					if xerr != nil || yerr != nil || zerr != nil {
+						return chat.Text("§cPassed argument is not a float")
+					}
+					executorPlayer.Connection.WritePacket(pk.Marshal(packetid.ClientboundPlayerPosition,
+						pk.Double(x),                         //x
+						pk.Double(y),                         //y
+						pk.Double(z),                         //z
+						pk.Float(executorPlayer.Rotation[0]), //yaw
+						pk.Float(executorPlayer.Rotation[1]), //pitch
+						pk.Byte(0),
+						pk.VarInt(server.NewTeleportID()),
+					))
+					return chat.Text(fmt.Sprintf("Teleported you to %v %v %v", x, y, z))
+				}
+			case 4:
+				{
+					is, player := ParseTarget(executorPlayer, args[0])
+					if !is {
+						return chat.Text("§cUnknown player at argument 0")
+					}
+					x, xerr := strconv.ParseFloat(args[1], 64)
+					y, yerr := strconv.ParseFloat(args[2], 64)
+					z, zerr := strconv.ParseFloat(args[3], 64)
+					if xerr != nil || yerr != nil || zerr != nil {
+						return chat.Text("§cPassed argument is not a float")
+					}
+					player.Connection.WritePacket(pk.Marshal(packetid.ClientboundPlayerPosition,
+						pk.Double(x),                 //x
+						pk.Double(y),                 //y
+						pk.Double(z),                 //z
+						pk.Float(player.Rotation[0]), //yaw
+						pk.Float(player.Rotation[1]), //pitch
+						pk.Byte(0),
+						pk.VarInt(server.NewTeleportID()),
+					))
+					return chat.Text(fmt.Sprintf("Teleported %s to %v %v %v", player.Name, x, y, z))
+				}
+			default:
+				return chat.Text("§cInvalid amount of arguments")
+			}
 		}
 	default:
 		return chat.Text(server.Config.Messages.UnknownCommand)
 	}
+}
+
+func ParseTarget(executor *Player, arg string) (bool, *Player) {
+	if len(arg) == 2 && strings.HasPrefix(arg, "@") {
+		t := strings.TrimPrefix(arg, "@")
+		switch t {
+		case "s":
+			{
+				return true, executor
+			}
+		default:
+			return false, nil
+		}
+	}
+	if player, ok := server.Players.Players[arg]; ok {
+		return true, player
+	}
+	if player, ok := server.Players.PlayerNames[arg]; ok {
+		return true, server.Players.Players[player]
+	}
+	return false, nil
 }
 
 func bToMb(b uint64) uint64 {

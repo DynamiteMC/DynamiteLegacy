@@ -17,9 +17,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/Tnze/go-mc/chat"
+	"github.com/Tnze/go-mc/chat/sign"
 	"github.com/Tnze/go-mc/data/packetid"
 	"github.com/Tnze/go-mc/level"
 	"github.com/Tnze/go-mc/nbt"
@@ -58,6 +60,8 @@ var loadList [][2]int32
 var radiusIdx []int
 
 func (player *Player) CalculateLoadingQueue() {
+	player.Lock()
+	defer player.Unlock()
 	player.LoadQueue = player.LoadQueue[:0]
 	rd := player.Client.ViewDistance
 	if rd > pk.Byte(server.Config.ViewDistance) {
@@ -73,6 +77,8 @@ func (player *Player) CalculateLoadingQueue() {
 }
 
 func (p *Player) CalculateUnusedChunks() {
+	p.Lock()
+	defer p.Unlock()
 	p.UnloadQueue = p.UnloadQueue[:0]
 	for chunk := range p.LoadedChunks {
 		player := [2]int32{p.ChunkPos[0], p.ChunkPos[2]}
@@ -112,8 +118,11 @@ func distance2i(pos [2]int32) float64 {
 	return math.Sqrt(float64(pos[0]*pos[0]) + float64(pos[1]*pos[1]))
 }
 func (w *World) LoadChunk(pos [2]int32) bool {
-	c := w.GetChunk(pos)
-	if c == nil {
+	if _, ok := w.Chunks[pos]; ok {
+		return true
+	}
+	c, err := w.GetChunk(pos)
+	if err != nil && errors.Is(err, ErrChunkNotExist) {
 		c = level.EmptyChunk(24)
 		c.Status = level.StatusFull
 	}
@@ -122,24 +131,44 @@ func (w *World) LoadChunk(pos [2]int32) bool {
 }
 
 func (w *World) UnloadChunk(pos [2]int32) {
-	server.Lock()
-	w.Lock()
-	defer server.Lock()
-	defer w.Lock()
-	for _, player := range server.Players {
+	for _, player := range server.Players.Players {
 		if player.Data.Dimension != w.Name {
 			continue
 		}
 		player.Connection.WritePacket(pk.Marshal(packetid.ClientboundForgetLevelChunk, level.ChunkPos(pos)))
 	}
+	err := w.PutChunk(pos, w.Chunks[pos].Chunk)
+	if err != nil {
+		server.Logger.Error("Failed to save chunk: %s", err)
+	}
 	delete(w.Chunks, pos)
 }
 
-func (server Server) PlayersAsBase() []PlayerBase {
+func (slot InventorySlot) WriteTo(w io.Writer) (int64, error) {
+	return pk.Tuple{
+		pk.Boolean(true),
+		pk.VarInt(0),
+		pk.Byte(slot.Count),
+		pk.NBT(slot.Tag),
+	}.WriteTo(w)
+}
+
+func (data PlayerData) WriteTo(w io.Writer) (int64, error) {
+	return pk.Tuple{
+		pk.Array([]any{data.Inventory[data.SelectedItemSlot]}),
+		data.Inventory[data.SelectedItemSlot],
+	}.WriteTo(w)
+}
+
+func (data PlayerData) Save(playerId string) {
+	server.WritePlayerData(playerId, data)
+}
+
+func (p PlayersC) AsBase() []PlayerBase {
+	p.Lock()
+	defer p.Unlock()
 	players := make([]PlayerBase, 0)
-	server.Lock()
-	defer server.Unlock()
-	for _, player := range server.Players {
+	for _, player := range p.Players {
 		players = append(players, PlayerBase{
 			UUID: player.UUID.String,
 			Name: player.Name,
@@ -301,10 +330,10 @@ func (emitter Events) RemoveListener(key string, index int) {
 func (emitter Events) RemoveAllListeners(key string) {
 	delete(emitter._Events, key)
 }
-func (server Server) IsOP(id string) (bool, PlayerBase) {
-	server.Lock()
-	defer server.Unlock()
-	for _, op := range server.OPs {
+func (players PlayersC) IsOP(id string) (bool, PlayerBase) {
+	players.Lock()
+	defer players.Unlock()
+	for _, op := range players.OPs {
 		if op.UUID == id || op.Name == id {
 			return true, op
 		}
@@ -335,9 +364,20 @@ func (server *Server) ParseWorldData() {
 		server.Logger.Error("Failed to parse world data")
 		os.Exit(1)
 	}
-	server.Worlds["minecraft:overworld"] = World{Name: "minecraft:overworld", Chunks: make(map[[2]int32]*LoadedChunk), Mutex: &sync.Mutex{}}
-	InitLoader()
+	server.Worlds["minecraft:overworld"] = World{Name: "minecraft:overworld", Chunks: make(map[[2]int32]*LoadedChunk), TickLock: &sync.Mutex{}}
 	go server.Worlds["minecraft:overworld"].TickLoop()
+
+	if _, e := os.Stat("DIM-1"); os.IsNotExist(e) {
+		server.Worlds["minecraft:nether"] = World{Name: "minecraft:nether", Chunks: make(map[[2]int32]*LoadedChunk), TickLock: &sync.Mutex{}}
+		go server.Worlds["minecraft:nether"].TickLoop()
+		server.Logger.Debug("Loaded nether dimension")
+	}
+	if _, e := os.Stat("DIM1"); os.IsNotExist(e) {
+		server.Worlds["minecraft:the_end"] = World{Name: "minecraft:the_end", Chunks: make(map[[2]int32]*LoadedChunk), TickLock: &sync.Mutex{}}
+		go server.Worlds["minecraft:the_end"].TickLoop()
+		server.Logger.Debug("Loaded the end dimension")
+	}
+	InitLoader()
 	server.Logger.Debug("Parsed world data")
 }
 
@@ -351,40 +391,88 @@ func (server *Server) NewTeleportID() int {
 	return server.TeleportCounter
 }
 
-func (world World) GetChunk(pos [2]int32) *level.Chunk {
+func (world World) GetChunk(pos [2]int32) (*level.Chunk, error) {
+	folder := "world/"
+	if world.Name == "minecraft:nether" {
+		folder += "DIM-1/"
+	}
+	if world.Name == "minecraft:the_end" {
+		folder += "DIM1/"
+	}
 	rx, rz := region.At(int(pos[0]), int(pos[1]))
-	filename := fmt.Sprintf("world/region/r.%d.%d.mca", rx, rz)
+	filename := fmt.Sprintf("%sregion/r.%d.%d.mca", folder, rx, rz)
 	r, err := region.Open(filename)
 	if errors.Is(err, fs.ErrNotExist) {
 		r, _ = region.Create(filename)
 	}
 	x, z := region.In(int(pos[0]), int(pos[1]))
 	if !r.ExistSector(x, z) {
-		return nil
+		return nil, nil
 	}
 	data, err := r.ReadSector(x, z)
 	if err != nil {
-		return nil
+		return nil, ErrChunkNotExist
 	}
 	var c save.Chunk
 	err = c.Load(data)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	r.Close()
 	chunk, err := level.ChunkFromSave(&c)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return chunk
+	return chunk, nil
+}
+
+func (world World) PutChunk(pos [2]int32, c *level.Chunk) (err error) {
+	var chunk save.Chunk
+	err = level.ChunkToSave(c, &chunk)
+	if err != nil {
+		return fmt.Errorf("encode chunk data fail: %w", err)
+	}
+
+	data, err := chunk.Data(1)
+	if err != nil {
+		return fmt.Errorf("record chunk data fail: %w", err)
+	}
+
+	folder := "world/"
+	if world.Name == "minecraft:nether" {
+		folder += "DIM-1/"
+	}
+	if world.Name == "minecraft:the_end" {
+		folder += "DIM1/"
+	}
+	rx, rz := region.At(int(pos[0]), int(pos[1]))
+	filename := fmt.Sprintf("%sregion/r.%d.%d.mca", folder, rx, rz)
+	r, err := region.Open(filename)
+	if err != nil {
+		return fmt.Errorf("open region fail: %w", err)
+	}
+	defer func(r *region.Region) {
+		err2 := r.Close()
+		if err == nil && err2 != nil {
+			err = fmt.Errorf("open region fail: %w", err)
+		}
+	}(r)
+
+	x, z := region.In(int(pos[0]), int(pos[1]))
+	err = r.WriteSector(x, z, data)
+	if err != nil {
+		return fmt.Errorf("write sector fail: %w", err)
+	}
+
+	return nil
 }
 
 func (server *Server) Init() {
-	server.Mutex = &sync.Mutex{}
-	server.Whitelist = LoadPlayerList("whitelist.json")
-	server.OPs = LoadPlayerList("ops.json")
-	server.BannedPlayers = LoadPlayerList("banned_players.json")
-	server.BannedIPs = LoadIPBans()
+	server.Players.Mutex = &sync.Mutex{}
+	server.Players.Whitelist = LoadPlayerList("whitelist.json")
+	server.Players.OPs = LoadPlayerList("ops.json")
+	server.Players.BannedPlayers = LoadPlayerList("banned_players.json")
+	server.Players.BannedIPs = LoadIPBans()
 	server.Worlds = make(map[string]World)
 	server.LoadAllPlugins()
 	os.MkdirAll("permissions/groups", 0755)
@@ -423,10 +511,10 @@ func (server *Server) GetFavicon() (bool, int, []byte) {
 }
 
 func (server Server) BroadcastMessage(message chat.Message) {
-	server.Lock()
-	defer server.Unlock()
+	server.Players.Lock()
+	defer server.Players.Unlock()
 	server.Logger.Print(message.String())
-	for _, player := range server.Players {
+	for _, player := range server.Players.Players {
 		server.Message(player.UUID.String, message)
 	}
 }
@@ -488,18 +576,17 @@ func (server Server) LoadPlugin(fileName string) {
 }
 
 func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message) {
-	server.Lock()
-	defer server.Unlock()
 	server.Logger.Print(message.String())
-	op := LoadPlayerList("ops.json")
+	server.Players.Lock()
+	defer server.Players.Unlock()
 	ops := make(map[string]PlayerBase)
-	for i := 0; i < len(op); i++ {
-		ops[op[i].UUID] = PlayerBase{
-			Name: op[i].Name,
-			UUID: op[i].UUID,
+	for i := 0; i < len(server.Players.OPs); i++ {
+		ops[server.Players.OPs[i].UUID] = PlayerBase{
+			Name: server.Players.OPs[i].Name,
+			UUID: server.Players.OPs[i].UUID,
 		}
 	}
-	for _, player := range server.Players {
+	for _, player := range server.Players.Players {
 		if ops[player.UUID.String].UUID == player.UUID.String && player.UUID.String != playerId {
 			server.Message(player.UUID.String, message)
 		} else {
@@ -509,17 +596,107 @@ func (server Server) BroadcastMessageAdmin(playerId string, message chat.Message
 }
 
 func (server Server) BroadcastPacket(packet pk.Packet) {
-	server.Lock()
-	defer server.Unlock()
-	for _, player := range server.Players {
+	server.Players.Lock()
+	defer server.Players.Unlock()
+	for _, player := range server.Players.Players {
+		player.Connection.WritePacket(packet)
+	}
+}
+
+func Point[T any](value T) *T {
+	return &value
+}
+
+type Variable struct {
+	Key   interface{}
+	Value interface{}
+}
+
+func LoopMap[K comparable, V interface{}](data map[K]V, do func(key K, value V, variables []Variable) []Variable, variables ...Variable) []Variable {
+	for k, v := range data {
+		variables = do(k, v, variables)
+	}
+	return variables
+}
+
+func LoopArray[V interface{}](data []V, do func(index int, value V, variables []Variable) []Variable, variables ...Variable) []Variable {
+	for i, v := range data {
+		variables = do(i, v, variables)
+	}
+	return variables
+}
+
+func (server Server) PlayerMessage(sender *Player, to string, data pk.Packet) {
+	var (
+		message       pk.String
+		timestampLong pk.Long
+		salt          pk.Long
+		signature     pk.Option[sign.Signature, *sign.Signature]
+		lastSeen      sign.HistoryUpdate
+	)
+	data.Scan(
+		&message,
+		&timestampLong,
+		&salt,
+		&signature,
+		&lastSeen,
+	)
+	group, prefix, suffix := server.GetGroup(sender.UUID.String)
+
+	content := ParsePlaceholders(server.Config.Chat.Format, Placeholders{PlayerName: sender.Name, PlayerPrefix: prefix, PlayerSuffix: suffix, Message: fmt.Sprint(message), PlayerGroup: group})
+	if server.Config.Chat.Colors && server.HasPermissions(sender.UUID.String, []string{"server.chat.colors"}) {
+		content = strings.ReplaceAll(content, "&", "§")
+	}
+	player, ok := server.Players.Players[to]
+	if !ok {
+		return
+	}
+	timestamp := time.UnixMilli(int64(timestampLong))
+	c := getNetworkRegistry().ChatType
+	chatTypeID, _ := c.Find("minecraft:chat")
+	chatType := chat.Type{
+		ID:         chatTypeID,
+		SenderName: chat.Text(sender.Name),
+		TargetName: nil,
+	}
+	player.Connection.WritePacket(pk.Marshal(
+		packetid.ClientboundPlayerChat,
+		sender.UUID.Binary,
+		pk.VarInt(0),
+		signature,
+		&sign.PackedMessageBody{
+			PlainMsg:  content,
+			Timestamp: timestamp,
+			Salt:      int64(salt),
+			LastSeen:  []sign.PackedSignature{},
+		},
+		pk.Boolean(false),
+		&sign.FilterMask{Type: 0},
+		&chatType,
+	))
+}
+
+func (server Server) BroadcastPlayerMessage(sender *Player, data pk.Packet) {
+	server.Players.Lock()
+	defer server.Players.Unlock()
+	for uuid := range server.Players.Players {
+		server.PlayerMessage(sender, uuid, data)
+	}
+}
+
+func (server Server) BroadcastPacketExcept(packet pk.Packet, uuid string) {
+	server.Players.Lock()
+	defer server.Players.Unlock()
+	for _, player := range server.Players.Players {
+		if player.UUID.String == uuid {
+			continue
+		}
 		player.Connection.WritePacket(packet)
 	}
 }
 
 func (server Server) Message(id string, message chat.Message) {
-	server.Lock()
-	defer server.Unlock()
-	player := server.Players[id]
+	player := server.Players.Players[id]
 	if player.UUID.String != id {
 		return
 	}
@@ -533,8 +710,8 @@ func (playerlist Playerlist) AddPlayer(player *Player) {
 	)
 	var buf bytes.Buffer
 	_, _ = addPlayerAction.WriteTo(&buf)
-	_, _ = pk.VarInt(len(server.Players)).WriteTo(&buf)
-	for _, player := range server.Players {
+	_, _ = pk.VarInt(len(server.Players.Players)).WriteTo(&buf)
+	for _, player := range server.Players.Players {
 		_, _ = pk.UUID(player.UUID.Binary).WriteTo(&buf)
 		_, _ = pk.String(player.Name).WriteTo(&buf)
 		_, _ = pk.Array(player.Properties).WriteTo(&buf)

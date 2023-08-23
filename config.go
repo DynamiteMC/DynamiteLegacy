@@ -24,6 +24,7 @@ type Messages struct {
 	InsufficientPermissions string `yaml:"insufficient_permissions"`
 	ReloadComplete          string `yaml:"reload_complete"`
 	ServerClosed            string `yaml:"server_closed"`
+	OnlineMode              string `yaml:"online_mode"`
 }
 
 type Icon struct {
@@ -94,6 +95,7 @@ func LoadConfig() *Config {
 				InsufficientPermissions: "§cYou aren't permitted to use this command.",
 				ReloadComplete:          "§aReload complete.",
 				ServerClosed:            "Server closed.",
+				OnlineMode:              "The server is in online mode.",
 			},
 			Icon: Icon{
 				Path:   "server-icon.png",

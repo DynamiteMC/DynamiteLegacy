@@ -12,11 +12,14 @@ import (
 )
 
 var server = Server{
-	Config:      LoadConfig(),
-	Players:     make(map[string]*Player),
-	PlayerNames: make(map[string]string),
-	PlayerIDs:   make([]string, 0),
-	Events:      Events{_Events: make(map[string][]func(...interface{}))},
+	Logger: &logger.Logger{},
+	Config: LoadConfig(),
+	Players: PlayersC{
+		Players:     make(map[string]*Player),
+		PlayerNames: make(map[string]string),
+		PlayerIDs:   make([]string, 0),
+	},
+	Events: Events{_Events: make(map[string][]func(...interface{}))},
 	Commands: map[string]Command{
 		"gamemode": {
 			Name:                "gamemode",
@@ -93,10 +96,13 @@ var server = Server{
 //go:embed registry.nbt
 var registries embed.FS
 
-func main() {
+func init() {
 	server.StartTime = time.Now().Unix()
-	server.Logger.Info("Starting GoCraft")
 	server.Init()
+	server.Logger.Info("Starting GoCraft")
+}
+
+func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {

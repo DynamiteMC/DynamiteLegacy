@@ -25,7 +25,7 @@ type Logger struct {
 	GUIConsole  *widget.TextGrid
 }
 
-func (logger Logger) Append(str string) {
+func (logger *Logger) Append(str string) {
 	logger.ConsoleText = append(logger.ConsoleText, str)
 	if logger.GUIConsole != nil {
 		logger.GUIConsole.SetText(strings.Join(logger.ConsoleText, "\n"))
@@ -36,7 +36,7 @@ func getDateString() string {
 	return time.Now().Format("15:04:05")
 }
 
-func (logger Logger) Info(format string, a ...interface{}) {
+func (logger *Logger) Info(format string, a ...interface{}) {
 	blue := color.New(color.FgBlue).Add(color.Bold).SprintFunc()
 	time := getDateString()
 	str := fmt.Sprintf(format, a...)
@@ -44,13 +44,13 @@ func (logger Logger) Info(format string, a ...interface{}) {
 	fmt.Printf("[%s %s]: %s\n", time, blue("INFO"), str)
 }
 
-func (logger Logger) Print(format string, a ...interface{}) {
+func (logger *Logger) Print(format string, a ...interface{}) {
 	format += "\n"
 	logger.Append(format)
 	fmt.Printf(format, a...)
 }
 
-func (logger Logger) Debug(format string, a ...interface{}) {
+func (logger *Logger) Debug(format string, a ...interface{}) {
 	if !HasArg("-debug") {
 		return
 	}
@@ -61,7 +61,7 @@ func (logger Logger) Debug(format string, a ...interface{}) {
 	fmt.Printf("[%s %s]: %s\n", time, cyan("DEBUG"), str)
 }
 
-func (logger Logger) Error(format string, a ...interface{}) {
+func (logger *Logger) Error(format string, a ...interface{}) {
 	red := color.New(color.FgRed).Add(color.Bold).SprintFunc()
 
 	time := getDateString()
@@ -70,7 +70,7 @@ func (logger Logger) Error(format string, a ...interface{}) {
 	fmt.Printf("[%s %s]: %s\n", time, red("ERROR"), str)
 }
 
-func (logger Logger) Warn(format string, a ...interface{}) {
+func (logger *Logger) Warn(format string, a ...interface{}) {
 	yellow := color.New(color.FgYellow).Add(color.Bold).SprintFunc()
 
 	time := getDateString()

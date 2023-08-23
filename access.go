@@ -81,19 +81,19 @@ func LoadIPBans() []string {
 */
 
 func ValidatePlayer(name string, id string, ip string) int {
-	for _, player := range server.BannedPlayers {
+	for _, player := range server.Players.BannedPlayers {
 		if player.UUID == id {
 			return 2
 		}
 	}
-	for _, i := range server.BannedIPs {
+	for _, i := range server.Players.BannedIPs {
 		if i == ip {
 			return 2
 		}
 	}
 	if server.Config.Whitelist.Enable {
 		d := false
-		for _, player := range server.Whitelist {
+		for _, player := range server.Players.Whitelist {
 			if player.UUID == id {
 				d = true
 				break
@@ -103,13 +103,13 @@ func ValidatePlayer(name string, id string, ip string) int {
 			return 1
 		}
 	}
-	if server.Players[id] != nil {
+	if server.Players.Players[id] != nil {
 		return 4
 	}
 	if server.Config.MaxPlayers == -1 {
 		return 0
 	}
-	if len(server.Players) >= server.Config.MaxPlayers {
+	if len(server.Players.Players) >= server.Config.MaxPlayers {
 		return 3
 	}
 	return 0
