@@ -99,7 +99,7 @@ var registries embed.FS
 func init() {
 	server.StartTime = time.Now().Unix()
 	server.Init()
-	server.Logger.Info("Starting GoCraft")
+	server.Logger.Info("Starting Dynamite")
 }
 
 func main() {
