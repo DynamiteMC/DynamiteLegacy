@@ -1,4 +1,4 @@
-name: Build GoCraft
+name: Build Dynamite
 
 on: [push]
 
@@ -26,17 +26,17 @@ jobs:
         uses: actions/upload-artifact@v3
         if: ${{ runner.os == 'Linux' }}
         with:
-          name: GoCraft-Linux
-          path: gocraft
+          name: Dynamite-Linux
+          path: dynamite
       - name: Upload Go build results windows
         uses: actions/upload-artifact@v3
         if: ${{ runner.os == 'Windows' }}
         with:
-          name: GoCraft-Windows
-          path: gocraft.exe
+          name: Dynamite-Windows
+          path: dynamite.exe
       - name: Upload Go build results macos
         uses: actions/upload-artifact@v3
         if: ${{ runner.os == 'macOS' }}
         with:
-          name: GoCraft-macOS
-          path: gocraft
+          name: Dynamite-macOS
+          path: dynamite
